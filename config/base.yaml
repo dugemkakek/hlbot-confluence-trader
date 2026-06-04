@@ -95,8 +95,8 @@ scanner:
 # api_key/api_secret are read from env when present; absent keys
 # automatically engage paper mode on real-exchange adapters.
 exchange:
-  venue: hyperliquid           # hyperliquid | binance | bybit | paper
-  market_type: usdt-m-future   # binance only: usdt-m-future | spot | coin-m-future
+  venue: hyperliquid           # hyperliquid | binance | bybit | okx | gate | paper
+  market_type: usdt-m-future   # binance/okx/gate: usdt-m-future | spot | coin-m-future
   doh: cloudflare              # Indonesia DNS bypass
   leverage: 10                 # applied when API keys are present (live mode)
   margin_mode: isolated        # applied when API keys are present (live mode)

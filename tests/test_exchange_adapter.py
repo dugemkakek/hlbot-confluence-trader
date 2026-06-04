@@ -112,11 +112,15 @@ def test_factory_bybit_now_implemented():
     assert isinstance(a, BybitAdapter)
 
 
-def test_factory_gate_still_stub():
-    from src.exchange.base import ExchangeError
-    with pytest.raises(ExchangeError) as exc_info:
-        build_exchange_adapter({"venue": "gate"})
-    assert "not yet implemented" in str(exc_info.value)
+def test_factory_gate_now_implemented():
+    """Gate.io adapter is now wired in (replaces the old stub).
+
+    See tests/test_gate_adapter.py for full coverage.
+    """
+    from src.exchange.gate import GateAdapter
+    a = build_exchange_adapter({"venue": "gate"})
+    assert a.venue == VenueKind.GATE
+    assert isinstance(a, GateAdapter)
 
 
 # ─────────────────────────────────────────────────────────────────────

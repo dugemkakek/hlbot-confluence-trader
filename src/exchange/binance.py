@@ -74,39 +74,10 @@ def _ccxt_timeframe(tf: str) -> str:
 
 
 # ─────────────────────────────────────────────────────────────────────
-# DNS-over-HTTPS resolver
+# DNS-over-HTTPS resolver (now in src.exchange.doh_plumbing)
 # ─────────────────────────────────────────────────────────────────────
 
-
-def _build_aiohttp_connector_doh(doh: str = "cloudflare") -> dict[str, Any]:
-    """Build aiohttp connector kwargs that use a DoH resolver.
-
-    Returns a `connector` factory that the BinanceMarketData
-    consumes in `connect()`. We can't construct the
-    AsyncResolver here directly because it needs a running
-    event loop; we defer that to inside `connect()`.
-    """
-    if doh not in ("cloudflare", "google"):
-        return {}
-
-    # Map doh -> nameservers (well-known IPs)
-    nameservers = {
-        "cloudflare": ["1.1.1.1", "1.0.0.1"],
-        "google": ["8.8.8.8", "8.8.4.4"],
-    }[doh]
-
-    # Return a factory — the connector is built lazily inside
-    # an event loop.
-    def _factory(loop=None):
-        try:
-            from aiohttp.resolver import AsyncResolver
-        except ImportError:
-            return None
-        return AsyncResolver(nameservers=nameservers, loop=loop)
-
-    return {
-        "connector_factory": _factory,
-    }
+from .doh_plumbing import build_aiohttp_connector_doh as _build_aiohttp_connector_doh  # noqa: F401
 
 
 # ─────────────────────────────────────────────────────────────────────

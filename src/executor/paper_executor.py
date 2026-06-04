@@ -138,6 +138,15 @@ class PaperExecutor:
         self._binance_poll_task: asyncio.Task | None = None
         self._binance_poll_interval: float = 2.0  # seconds
 
+        # 2026-06-04: shared CEX poller state. Same shape as
+        # the Binance one above, used for any non-Hyperliquid
+        # venue (OKX, Gate.io, etc.). Symbol mapping is venue
+        # specific and resolved per venue.
+        self._cex_client: Any = None
+        self._cex_subscribed: set[str] = set()
+        self._cex_poll_task: asyncio.Task | None = None
+        self._cex_venue_kind: str = ""  # e.g. "okx", "gate", "binance"
+
         # Live orderbook state keyed by symbol — use OrderbookSnapshot for best bid/ask
         self._orderbooks: dict[str, OrderbookSnapshot] = {}
 
@@ -220,11 +229,12 @@ class PaperExecutor:
                 self._redis = None
 
         # ── WebSocket (required for live prices) ───────────────────────────────
-        if self._venue == "binance":
-            # Binance paper mode: public REST polling, no auth needed.
+        if self._venue in ("binance", "okx", "gate", "bybit"):
+            # CEX paper mode: public REST polling, no auth needed.
             # No API keys = paper mode (synthetic fills from last
-            # ticker). We poll /api/v3/depth for L2 orderbook data
-            # on the public endpoint. No orders are placed.
+            # ticker). We poll the venue's L2 orderbook endpoint
+            # via ccxt. No orders are placed.
+            self._cex_venue_kind = self._venue
             doh = "system"
             try:
                 exch = getattr(self.cfg, "exchange", None)
@@ -234,16 +244,19 @@ class PaperExecutor:
                 pass
             try:
                 import ccxt.async_support as ccxt_async
+                ccxt_class = getattr(ccxt_async, self._venue)
                 opts: dict[str, Any] = {
                     "enableRateLimit": True,
-                    "options": {"defaultType": "future"},  # USDT-M futures
+                    "options": {},
                 }
-                # Apply DoH if configured. ccxt doesn't expose a
-                # direct hook for the connector resolver, so we
-                # hook in via aiohttp_trust_env=False + the
-                # AsyncResolver injected as the connector's
-                # `resolver` arg. If anything fails we fall back
-                # to system DNS.
+                # Per-venue default type for ccxt
+                if self._venue == "binance":
+                    opts["options"]["defaultType"] = "future"
+                elif self._venue == "okx":
+                    opts["defaultType"] = "swap"
+                elif self._venue == "gate":
+                    opts["defaultType"] = "spot"
+                # elif bybit: defaultType=linear
                 if doh in ("cloudflare", "google"):
                     try:
                         from aiohttp.resolver import AsyncResolver
@@ -255,22 +268,27 @@ class PaperExecutor:
                             return AsyncResolver(nameservers=nameservers, loop=loop)
                         opts["aiohttp_trust_env"] = False
                         opts["connector_args"] = {"resolver_factory": _factory}
-                        logger.info("Binance using DoH", provider=doh)
+                        logger.info(f"{self._venue} using DoH", provider=doh)
                     except Exception as exc:
                         logger.warning("DoH setup failed, falling back to system DNS", error=str(exc))
-                self._binance_client = ccxt_async.binance(opts)
+                self._cex_client = ccxt_class(opts)
+                self._binance_client = self._cex_client  # legacy alias
                 # Smoke test the connection
-                await self._binance_client.fetch_ticker("BTC/USDT")
-                self._binance_poll_task = asyncio.create_task(self._binance_poll_loop())
+                smoke_symbol = self._cex_smoke_symbol()
+                if smoke_symbol:
+                    await self._cex_client.fetch_ticker(smoke_symbol)
+                self._cex_poll_task = asyncio.create_task(self._cex_poll_loop())
+                self._binance_poll_task = self._cex_poll_task  # legacy alias
                 logger.info(
-                    "Binance paper mode connected",
+                    f"{self._venue} paper mode connected",
                     note="polling public orderbook data; no orders placed",
                 )
             except Exception as exc:
                 logger.warning(
-                    "Binance connect failed — running without orderbook data",
+                    f"{self._venue} connect failed — running without orderbook data",
                     error=str(exc),
                 )
+                self._cex_client = None
                 self._binance_client = None
             return
 
@@ -357,7 +375,9 @@ class PaperExecutor:
             task.cancel()
         self._pending_limit_orders.clear()
 
-        # 2026-06-04: stop the Binance poller if running
+        # 2026-06-04: stop the CEX poller if running (covers
+        # Binance, OKX, Gate, Bybit — all share the same poll
+        # loop and client)
         if self._binance_poll_task is not None:
             self._binance_poll_task.cancel()
             try:
@@ -371,6 +391,11 @@ class PaperExecutor:
             except Exception:
                 pass
             self._binance_client = None
+        # Clear the new CEX state aliases too
+        self._cex_poll_task = None
+        self._cex_client = None
+        self._cex_subscribed = set()
+        self._cex_venue_kind = ""
 
         if self._ws:
             await self._ws.close()
@@ -397,14 +422,16 @@ class PaperExecutor:
         Without this, order execution fails for any symbol not in the hardcoded
         config list with "No orderbook data available".
         """
-        if self._venue == "binance":
+        if self._venue in ("binance", "okx", "gate", "bybit"):
             # The polling loop picks up new symbols on its next tick.
-            new = [s for s in symbols if s not in self._binance_subscribed]
+            new = [s for s in symbols if s not in self._cex_subscribed]
             if new:
+                self._cex_subscribed.update(new)
+                # Legacy alias for code that still references it
                 self._binance_subscribed.update(new)
                 logger.debug(
-                    "Binance orderbook subscription updated",
-                    new=new, total=len(self._binance_subscribed),
+                    f"{self._venue} orderbook subscription updated",
+                    new=new, total=len(self._cex_subscribed),
                 )
             return
         if not self._ws:
@@ -428,6 +455,106 @@ class PaperExecutor:
             return hl_symbol
         # Most perp symbols on Binance USDT-M are "BASE/USDT"
         return f"{hl_symbol}/USDT"
+
+    @staticmethod
+    def _okx_symbol(hl_symbol: str) -> str:
+        """Map Hyperliquid symbol to OKX ccxt symbol (e.g. 'BTC-USDT').
+
+        OKX uses hyphenated symbols. We default to SWAP (linear perp)
+        since that's what our strategy trades. Stablecoins pass through.
+        """
+        if "-" in hl_symbol:
+            return hl_symbol
+        if hl_symbol.endswith("USDT") or hl_symbol.endswith("USDC"):
+            return hl_symbol
+        return f"{hl_symbol}-USDT"
+
+    @staticmethod
+    def _gate_symbol(hl_symbol: str) -> str:
+        """Map Hyperliquid symbol to Gate.io ccxt symbol (e.g. 'BTC_USDT').
+
+        Gate.io uses underscored symbols. Default to USDT pairs.
+        """
+        if "_" in hl_symbol:
+            return hl_symbol
+        if hl_symbol.endswith("USDT") or hl_symbol.endswith("USDC"):
+            return hl_symbol
+        return f"{hl_symbol}_USDT"
+
+    def _cex_symbol(self, hl_symbol: str) -> str:
+        """Dispatch to the venue-specific symbol mapper."""
+        if self._venue == "okx":
+            return self._okx_symbol(hl_symbol)
+        if self._venue == "gate":
+            return self._gate_symbol(hl_symbol)
+        return self._binance_symbol(hl_symbol)  # binance + bybit fallback
+
+    def _cex_smoke_symbol(self) -> str:
+        """Return a stable symbol to use for the post-connect smoke test."""
+        if self._venue == "okx":
+            return "BTC-USDT"
+        if self._venue == "gate":
+            return "BTC_USDT"
+        if self._venue == "bybit":
+            return "BTC/USDT"
+        return "BTC/USDT"  # binance default
+
+    async def _binance_poll_loop(self) -> None:
+        """Background task: poll CEX L2 orderbook for each subscribed symbol.
+
+        Runs every `self._binance_poll_interval` seconds. Updates
+        `self._orderbooks` keyed by the Hyperliquid symbol so the
+        rest of the executor (and the orchestrator) is unchanged.
+
+        The loop body is venue-agnostic: it reads from
+        `self._cex_client` and dispatches symbol mapping through
+        `self._cex_symbol`. Older code (and references to
+        `_binance_poll_loop` / `_binance_poll_once` / `_binance_subscribed`)
+        remain valid via the `self._binance_*` aliases set in
+        `connect()`.
+        """
+        while True:
+            try:
+                await self._cex_poll_once()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.debug(f"{self._venue} poll loop error", error=str(exc))
+            await asyncio.sleep(self._binance_poll_interval)
+
+    async def _cex_poll_once(self) -> None:
+        if not self._cex_client or not self._cex_subscribed:
+            return
+        # Snapshot subscribed set so concurrent mutations don't blow up
+        symbols = list(self._cex_subscribed)
+        for hl_symbol in symbols:
+            try:
+                venue_sym = self._cex_symbol(hl_symbol)
+                ob = await self._cex_client.fetch_order_book(venue_sym, limit=20)
+            except Exception as exc:
+                logger.debug(f"{self._venue} orderbook fetch failed", symbol=hl_symbol, error=str(exc))
+                continue
+            bids_raw = ob.get("bids") or []
+            asks_raw = ob.get("asks") or []
+            if not bids_raw or not asks_raw:
+                continue
+            bids = [
+                OrderbookLevel(price=float(p), size=float(s))
+                for p, s in bids_raw[:20]
+            ]
+            asks = [
+                OrderbookLevel(price=float(p), size=float(s))
+                for p, s in asks_raw[:20]
+            ]
+            self._orderbooks[hl_symbol] = OrderbookSnapshot(
+                symbol=hl_symbol,
+                bids=bids,
+                asks=asks,
+                timestamp=datetime.now(timezone.utc),
+            )
+
+    # legacy alias used by old call sites / external tests
+    _binance_poll_once = _cex_poll_once
 
     async def _binance_poll_loop(self) -> None:
         """Background task: poll Binance L2 orderbook for each subscribed symbol.

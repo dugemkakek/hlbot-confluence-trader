@@ -115,9 +115,11 @@ def _build_bybit(config: dict[str, Any] | None = None) -> ExchangeAdapter:
 
 @_register(VenueKind.GATE)
 def _build_gate(config: dict[str, Any] | None = None) -> ExchangeAdapter:
-    raise ExchangeError("Gate adapter not yet implemented.")
+    from .gate import GateAdapter
+    return GateAdapter(config or {})
 
 
 @_register(VenueKind.OKX)
 def _build_okx(config: dict[str, Any] | None = None) -> ExchangeAdapter:
-    raise ExchangeError("OKX adapter not yet implemented.")
+    from .okx import OKXAdapter
+    return OKXAdapter(config or {})
