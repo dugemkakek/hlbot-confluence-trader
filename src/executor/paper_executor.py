@@ -118,6 +118,26 @@ class PaperExecutor:
         self._db: Database | None = None
         self._redis: redis.Redis | None = None
 
+        # 2026-06-04: Binance paper-trading support. When the
+        # configured exchange venue is binance, we poll the public
+        # ccxt REST endpoint for orderbook data instead of the
+        # Hyperliquid WebSocket. Symbol mapping: Hyperliquid's
+        # "BTC" maps to Binance's "BTC/USDT" (etc.). We keep
+        # `self._orderbooks` keyed by the *Hyperliquid* symbol so
+        # the rest of the executor (and the orchestrator's symbol
+        # flow) is unchanged.
+        self._venue: str = "hyperliquid"
+        try:
+            exch = getattr(self.cfg, "exchange", None)
+            if exch is not None:
+                self._venue = getattr(exch, "venue", "hyperliquid")
+        except Exception:
+            self._venue = "hyperliquid"
+        self._binance_client: Any = None
+        self._binance_subscribed: set[str] = set()
+        self._binance_poll_task: asyncio.Task | None = None
+        self._binance_poll_interval: float = 2.0  # seconds
+
         # Live orderbook state keyed by symbol — use OrderbookSnapshot for best bid/ask
         self._orderbooks: dict[str, OrderbookSnapshot] = {}
 
@@ -142,6 +162,22 @@ class PaperExecutor:
             maker_fee_bps=self._maker_fee_bps,
             taker_fee_bps=self._taker_fee_bps,
         )
+
+        # 2026-06-04: install DoH resolver for blocked crypto
+        # hostnames. The user is in Indonesia where ISPs
+        # (Telkomsel etc.) intercept DNS for exchanges like
+        # api.binance.com. The DoH patch makes
+        # socket.getaddrinfo go through Cloudflare/Google for
+        # the blocked hosts, so ccxt + aiohttp can reach them
+        # even when the system DNS is compromised.
+        try:
+            from ..utils.doh import install_doh_resolver
+            exch = getattr(self.cfg, "exchange", None)
+            doh = getattr(exch, "doh", "system") if exch else "system"
+            if doh in ("cloudflare", "google"):
+                install_doh_resolver(doh)
+        except Exception as exc:
+            logger.debug("DoH install skipped", error=str(exc))
 
     # ------------------------------------------------------------------
     # Connection management
@@ -184,6 +220,60 @@ class PaperExecutor:
                 self._redis = None
 
         # ── WebSocket (required for live prices) ───────────────────────────────
+        if self._venue == "binance":
+            # Binance paper mode: public REST polling, no auth needed.
+            # No API keys = paper mode (synthetic fills from last
+            # ticker). We poll /api/v3/depth for L2 orderbook data
+            # on the public endpoint. No orders are placed.
+            doh = "system"
+            try:
+                exch = getattr(self.cfg, "exchange", None)
+                if exch is not None:
+                    doh = getattr(exch, "doh", "system")
+            except Exception:
+                pass
+            try:
+                import ccxt.async_support as ccxt_async
+                opts: dict[str, Any] = {
+                    "enableRateLimit": True,
+                    "options": {"defaultType": "future"},  # USDT-M futures
+                }
+                # Apply DoH if configured. ccxt doesn't expose a
+                # direct hook for the connector resolver, so we
+                # hook in via aiohttp_trust_env=False + the
+                # AsyncResolver injected as the connector's
+                # `resolver` arg. If anything fails we fall back
+                # to system DNS.
+                if doh in ("cloudflare", "google"):
+                    try:
+                        from aiohttp.resolver import AsyncResolver
+                        nameservers = {
+                            "cloudflare": ["1.1.1.1", "1.0.0.1"],
+                            "google": ["8.8.8.8", "8.8.4.4"],
+                        }[doh]
+                        def _factory(loop=None):
+                            return AsyncResolver(nameservers=nameservers, loop=loop)
+                        opts["aiohttp_trust_env"] = False
+                        opts["connector_args"] = {"resolver_factory": _factory}
+                        logger.info("Binance using DoH", provider=doh)
+                    except Exception as exc:
+                        logger.warning("DoH setup failed, falling back to system DNS", error=str(exc))
+                self._binance_client = ccxt_async.binance(opts)
+                # Smoke test the connection
+                await self._binance_client.fetch_ticker("BTC/USDT")
+                self._binance_poll_task = asyncio.create_task(self._binance_poll_loop())
+                logger.info(
+                    "Binance paper mode connected",
+                    note="polling public orderbook data; no orders placed",
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Binance connect failed — running without orderbook data",
+                    error=str(exc),
+                )
+                self._binance_client = None
+            return
+
         try:
             self._ws = HyperliquidWebSocket()
             await self._ws.connect()
@@ -267,6 +357,21 @@ class PaperExecutor:
             task.cancel()
         self._pending_limit_orders.clear()
 
+        # 2026-06-04: stop the Binance poller if running
+        if self._binance_poll_task is not None:
+            self._binance_poll_task.cancel()
+            try:
+                await self._binance_poll_task
+            except (asyncio.CancelledError, Exception):
+                pass
+            self._binance_poll_task = None
+        if self._binance_client is not None:
+            try:
+                await self._binance_client.close()
+            except Exception:
+                pass
+            self._binance_client = None
+
         if self._ws:
             await self._ws.close()
             self._ws = None
@@ -292,6 +397,16 @@ class PaperExecutor:
         Without this, order execution fails for any symbol not in the hardcoded
         config list with "No orderbook data available".
         """
+        if self._venue == "binance":
+            # The polling loop picks up new symbols on its next tick.
+            new = [s for s in symbols if s not in self._binance_subscribed]
+            if new:
+                self._binance_subscribed.update(new)
+                logger.debug(
+                    "Binance orderbook subscription updated",
+                    new=new, total=len(self._binance_subscribed),
+                )
+            return
         if not self._ws:
             return
         for symbol in symbols:
@@ -299,6 +414,67 @@ class PaperExecutor:
                 await self._ws.subscribe_orderbook(symbol)
             except Exception as exc:
                 logger.debug("orderbook subscription skipped", symbol=symbol, error=str(exc))
+
+    @staticmethod
+    def _binance_symbol(hl_symbol: str) -> str:
+        """Map Hyperliquid symbol (e.g. 'BTC') to Binance ccxt symbol ('BTC/USDT').
+
+        Stablecoins and quote-only symbols pass through unchanged.
+        """
+        if "/" in hl_symbol:
+            return hl_symbol
+        # Skip if already looks like a USDT pair or quote is something else
+        if hl_symbol.endswith("USDT") or hl_symbol.endswith("USDC"):
+            return hl_symbol
+        # Most perp symbols on Binance USDT-M are "BASE/USDT"
+        return f"{hl_symbol}/USDT"
+
+    async def _binance_poll_loop(self) -> None:
+        """Background task: poll Binance L2 orderbook for each subscribed symbol.
+
+        Runs every `self._binance_poll_interval` seconds. Updates
+        `self._orderbooks` keyed by the Hyperliquid symbol so the
+        rest of the executor (and the orchestrator) is unchanged.
+        """
+        while True:
+            try:
+                await self._binance_poll_once()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.debug("Binance poll loop error", error=str(exc))
+            await asyncio.sleep(self._binance_poll_interval)
+
+    async def _binance_poll_once(self) -> None:
+        if not self._binance_client or not self._binance_subscribed:
+            return
+        # Snapshot subscribed set so concurrent mutations don't blow up
+        symbols = list(self._binance_subscribed)
+        for hl_symbol in symbols:
+            try:
+                binance_sym = self._binance_symbol(hl_symbol)
+                ob = await self._binance_client.fetch_order_book(binance_sym, limit=20)
+            except Exception as exc:
+                logger.debug("Binance orderbook fetch failed", symbol=hl_symbol, error=str(exc))
+                continue
+            bids_raw = ob.get("bids") or []
+            asks_raw = ob.get("asks") or []
+            if not bids_raw or not asks_raw:
+                continue
+            bids = [
+                OrderbookLevel(price=float(p), size=float(s))
+                for p, s in bids_raw[:20]
+            ]
+            asks = [
+                OrderbookLevel(price=float(p), size=float(s))
+                for p, s in asks_raw[:20]
+            ]
+            self._orderbooks[hl_symbol] = OrderbookSnapshot(
+                symbol=hl_symbol,
+                bids=bids,
+                asks=asks,
+                timestamp=datetime.now(timezone.utc),
+            )
 
     def get_orderbook(self, symbol: str) -> OrderbookSnapshot | None:
         """Return cached orderbook snapshot for a symbol, or None."""

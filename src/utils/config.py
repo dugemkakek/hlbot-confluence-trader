@@ -64,9 +64,17 @@ class ExchangeConfig(BaseModel):
 
     Only `hyperliquid` and `paper` are fully implemented today.
     CEX venues raise a clear "not yet implemented" error.
+
+    2026-06-04: added market_type / doh / leverage / margin_mode
+    for CEX venues. The Binance paper-trading path reads these
+    via the loaded AppConfig (see PaperExecutor).
     """
 
     venue: str = "hyperliquid"
+    market_type: str = "usdt-m-future"
+    doh: str = "system"
+    leverage: int = 1
+    margin_mode: str = "isolated"
     testnet: bool = False
     api_key: str | None = None
     api_secret: str | None = None

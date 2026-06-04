@@ -89,6 +89,18 @@ scanner:
   exclude_coins: ["USDC", "USDT", "FEE", "GFC", "JTO"]
   min_volume_24h_usd: 10000
 
+# ── Exchange adapter (2026-06-04) ─────────────────────────────────
+# 'venue' selects the exchange; market_type is venue-specific.
+# 'doh' = DNS-over-HTTPS resolver ('cloudflare' | 'google' | 'system').
+# api_key/api_secret are read from env when present; absent keys
+# automatically engage paper mode on real-exchange adapters.
+exchange:
+  venue: hyperliquid           # hyperliquid | binance | bybit | paper
+  market_type: usdt-m-future   # binance only: usdt-m-future | spot | coin-m-future
+  doh: cloudflare              # Indonesia DNS bypass
+  leverage: 10                 # applied when API keys are present (live mode)
+  margin_mode: isolated        # applied when API keys are present (live mode)
+
 audit:
   db_path: "data/audit.db"
   retention_days: 90          # rows older than this can be pruned via prune_old_entries()

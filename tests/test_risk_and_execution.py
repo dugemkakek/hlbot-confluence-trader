@@ -59,20 +59,21 @@ def risk_manager(cfg):
 class TestPositionSizeCheck:
     def test_within_cap_passes(self, risk_manager):
         rm, _ = risk_manager
-        ok, reason = rm.check_position_size(0.10)  # 10% < 20% cap
+        cap = rm._max_position_pct
+        ok, reason = rm.check_position_size(cap - 0.05)  # 5% below cap
         assert ok, reason
 
     def test_exceeds_cap_rejects(self, risk_manager):
         rm, _ = risk_manager
-        ok, reason = rm.check_position_size(0.50)  # 50% > 20% cap
+        cap = rm._max_position_pct
+        ok, reason = rm.check_position_size(cap + 0.30)  # 30% above cap
         assert not ok
         assert "max" in reason.lower() or "Position size" in reason
 
     def test_at_cap_boundary(self, risk_manager):
         """`size <= max` is the convention. At exactly cap = ok."""
         rm, _ = risk_manager
-        # cfg.risk.max_position_pct defaults to 0.20
-        ok, _ = rm.check_position_size(0.20)
+        ok, _ = rm.check_position_size(rm._max_position_pct)
         assert ok
 
 
@@ -84,12 +85,14 @@ class TestPositionSizeCheck:
 class TestPortfolioExposureCheck:
     def test_low_exposure_passes(self, risk_manager):
         rm, _ = risk_manager
-        ok, reason = rm.check_portfolio_exposure(0.30)  # 30% < 50% cap
+        cap = rm._max_portfolio_exposure
+        ok, reason = rm.check_portfolio_exposure(min(cap - 0.20, cap * 0.5))
         assert ok, reason
 
     def test_exceeds_exposure_rejects(self, risk_manager):
         rm, _ = risk_manager
-        ok, reason = rm.check_portfolio_exposure(0.75)
+        cap = rm._max_portfolio_exposure
+        ok, reason = rm.check_portfolio_exposure(cap + 0.25)
         assert not ok
         assert "exposure" in reason.lower() or "Portfolio" in reason
 
@@ -102,12 +105,13 @@ class TestPortfolioExposureCheck:
 class TestDailyTradeCheck:
     def test_under_limit_passes(self, risk_manager):
         rm, _ = risk_manager
-        ok, reason = rm.check_daily_trades(5)  # 5 < 20 cap
+        cap = rm._max_daily_trades
+        ok, reason = rm.check_daily_trades(max(cap - 5, 1))
         assert ok, reason
 
     def test_at_limit_rejects(self, risk_manager):
         rm, _ = risk_manager
-        ok, reason = rm.check_daily_trades(20)
+        ok, reason = rm.check_daily_trades(rm._max_daily_trades)
         assert not ok
 
     def test_under_cap_with_overrides(self, risk_manager):
@@ -471,8 +475,43 @@ class TestPortfolioSummary:
             assert p.cash_balance == ex._initial_balance
             assert p.exposure == 0.0
             assert p.positions == []
-            await ex.disconnect()
-        asyncio.run(run())
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Binance paper-trading symbol mapping (2026-06-04)
+# ─────────────────────────────────────────────────────────────────────
+
+
+class TestBinanceSymbolMapping:
+    """PaperExecutor must map Hyperliquid symbols to ccxt Binance symbols."""
+
+    def test_base_symbol_gets_usdt(self):
+        assert PaperExecutor._binance_symbol("BTC") == "BTC/USDT"
+        assert PaperExecutor._binance_symbol("ETH") == "ETH/USDT"
+        assert PaperExecutor._binance_symbol("SOL") == "SOL/USDT"
+
+    def test_already_paired_passes_through(self):
+        # If a symbol is already in ccxt form, don't double-suffix it
+        assert PaperExecutor._binance_symbol("BTC/USDT") == "BTC/USDT"
+        assert PaperExecutor._binance_symbol("ETH/USDC") == "ETH/USDC"
+
+    def test_already_quoted_suffix_passes_through(self):
+        # Symbols ending in USDT/USDC stay as-is (no double suffix)
+        assert PaperExecutor._binance_symbol("BTCUSDT") == "BTCUSDT"
+        assert PaperExecutor._binance_symbol("ETHUSDC") == "ETHUSDC"
+
+    def test_executor_uses_loaded_venue(self):
+        """The executor picks up the configured venue. As of 2026-06-04
+        dev.yaml sets exchange.venue=binance, so PaperExecutor's
+        `_venue` follows that."""
+        from src.utils.config import get_config
+        cfg = get_config()
+        expected = "hyperliquid"
+        exch = getattr(cfg, "exchange", None)
+        if exch is not None:
+            expected = getattr(exch, "venue", "hyperliquid")
+        ex = PaperExecutor()
+        assert ex._venue == expected
 
     def test_portfolio_with_position(self):
         async def run():

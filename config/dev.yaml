@@ -24,6 +24,19 @@ executor:
 orchestrator:
   cycle_interval_seconds: 30
 
+# 2026-06-04: reverted venue to hyperliquid. The Binance paper
+# path is wired in code (PaperExecutor handles venue=='binance'
+# with ccxt polling + DoH for DNS bypass) but the network here
+# is firewall-blocked at the IP layer, not just DNS. The DoH
+# resolver returns correct Binance IPs (13.249.239.121 etc.) but
+# the actual TCP connection is hijacked by a captive portal.
+# Need a proxy or VPN to actually reach Binance. To re-enable
+# Binance once you have a proxy, set venue: binance here.
+exchange:
+  venue: hyperliquid
+  market_type: usdt-m-future
+  doh: cloudflare
+
 scanner:
   rough_filter_max: 20
   min_sz_decimals: 1

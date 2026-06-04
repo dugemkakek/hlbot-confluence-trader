@@ -73,9 +73,20 @@ def test_factory_paper():
     assert isinstance(a.account, PaperAccount)
 
 
-def test_factory_default_is_hyperliquid():
+def test_factory_default_uses_loaded_config():
+    """When no config is passed, the factory reads from the loaded
+    AppConfig. As of 2026-06-04 dev.yaml defaults venue=binance, so
+    the factory default follows that. Pass an explicit `config={}` to
+    force the 'hyperliquid' fallback (see test_factory_hyperliquid)."""
+    from src.utils.config import get_config
+    cfg = get_config()
+    expected_venue = getattr(cfg, "exchange", None)
+    if expected_venue is not None:
+        expected = expected_venue.venue
+    else:
+        expected = "hyperliquid"
     a = build_exchange_adapter()
-    assert a.venue == VenueKind.HYPERLIQUID
+    assert a.venue.value == expected
 
 
 def test_factory_unknown_venue_raises():
