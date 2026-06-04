@@ -871,9 +871,16 @@ class PaperExecutor:
             total_pnl=round(self._realized_pnl + total_unrealized, 2),
             margin_used=0.0,  # Paper trading — no actual margin
             exposure=round(total_exposure, 2),
+            # 2026-06-04: changed denominator from initial_balance to
+            # total_equity. Using initial_balance made the cap relative
+            # to a stale $50 baseline, so as cash/equity drifted, the
+            # bot kept adding positions until exposure_pct crossed 50%
+            # only after the fact. The risk check is called per-entry
+            # with the pre-trade portfolio, so the denominator must
+            # reflect current equity for the cap to be meaningful.
             exposure_pct=(
-                round(total_exposure / self._initial_balance, 4)
-                if self._initial_balance > 0
+                round(total_exposure / total_equity, 4)
+                if total_equity > 0
                 else 0.0
             ),
             positions=list(self._positions.values()),

@@ -1,0 +1,146 @@
+{
+  "captured_at": "2026-06-04T10:13:32.990759+00:00",
+  "health": {
+    "status": "ok",
+    "pid": 15136
+  },
+  "current": {
+    "portfolio": {
+      "total_equity": 58.11,
+      "cash_balance": 32.22,
+      "unrealized_pnl": -0.04,
+      "realized_pnl": 0.0,
+      "total_pnl": -0.04,
+      "margin_used": 0.0,
+      "exposure": 25.94,
+      "exposure_pct": 0.5188,
+      "positions": [
+        {
+          "symbol": "ATOM",
+          "side": "LONG",
+          "size": 5.710283001835792,
+          "entry_price": 1.7579370350065353,
+          "current_price": 1.7488001341352593,
+          "unrealized_pnl": -0.052174289734706294,
+          "unrealized_pnl_pct": -0.5197513158508597,
+          "exposure": 9.986143679560724,
+          "created_at": "2026-06-04T09:19:32.574859Z"
+        },
+        {
+          "symbol": "BTC",
+          "side": "SHORT",
+          "size": 6.496967685028474e-05,
+          "entry_price": 63157.37302682922,
+          "current_price": 63151.999602252574,
+          "unrealized_pnl": 0.0003491096583240919,
+          "unrealized_pnl_pct": 0.008507992525850829,
+          "exposure": 4.10296500660766,
+          "created_at": "2026-06-04T10:00:19.854554Z"
+        },
+        {
+          "symbol": "XMR",
+          "side": "LONG",
+          "size": 0.01435380715847203,
+          "entry_price": 346.7178619027845,
+          "current_price": 347.1100445379326,
+          "unrealized_pnl": 0.00562931391581747,
+          "unrealized_pnl_pct": 0.11311290194160246,
+          "exposure": 4.982350642066122,
+          "created_at": "2026-06-04T10:01:41.473033Z"
+        },
+        {
+          "symbol": "AR",
+          "side": "LONG",
+          "size": 3.000184369356525,
+          "entry_price": 2.2872846060136314,
+          "current_price": 2.2888042459628086,
+          "unrealized_pnl": 0.004559200022571341,
+          "unrealized_pnl_pct": 0.06643860345065417,
+          "exposure": 6.866834723254465,
+          "created_at": "2026-06-04T10:01:42.162037Z"
+        }
+      ]
+    },
+    "positions": [
+      {
+        "symbol": "ATOM",
+        "side": "LONG",
+        "size": 5.710283001835792,
+        "entry": 1.7579370350065353,
+        "current": 1.7488001341352593,
+        "uPnL": -0.052174289734706294,
+        "uPnL_pct": -0.5197513158508597,
+        "exposure": 9.986143679560724,
+        "opened_at": "2026-06-04T09:19:32.574859Z"
+      },
+      {
+        "symbol": "BTC",
+        "side": "SHORT",
+        "size": 6.496967685028474e-05,
+        "entry": 63157.37302682922,
+        "current": 63151.999602252574,
+        "uPnL": 0.0003491096583240919,
+        "uPnL_pct": 0.008507992525850829,
+        "exposure": 4.10296500660766,
+        "opened_at": "2026-06-04T10:00:19.854554Z"
+      },
+      {
+        "symbol": "XMR",
+        "side": "LONG",
+        "size": 0.01435380715847203,
+        "entry": 346.7178619027845,
+        "current": 347.1100445379326,
+        "uPnL": 0.00562931391581747,
+        "uPnL_pct": 0.11311290194160246,
+        "exposure": 4.982350642066122,
+        "opened_at": "2026-06-04T10:01:41.473033Z"
+      },
+      {
+        "symbol": "AR",
+        "side": "LONG",
+        "size": 3.000184369356525,
+        "entry": 2.2872846060136314,
+        "current": 2.2888042459628086,
+        "uPnL": 0.004559200022571341,
+        "uPnL_pct": 0.06643860345065417,
+        "exposure": 6.866834723254465,
+        "opened_at": "2026-06-04T10:01:42.162037Z"
+      }
+    ],
+    "signals": {
+      "total": 9973,
+      "last_captured": "2026-06-04 10:12:36",
+      "current_cycle": 370,
+      "by_key": {
+        "AAVE:1h": 194,
+        "ACE:1h": 311,
+        "APT:1h": 253,
+        "AR:1h": 556,
+        "ATOM:1h": 961,
+        "AVAX:1h": 180,
+        "BCH:1h": 677,
+        "BNB:1h": 582,
+        "BSV:1h": 107,
+        "BTC:1h": 1654,
+        "COMP:1h": 186,
+        "DASH:1h": 176,
+        "EIGEN:1h": 546,
+        "ETH:1h": 952,
+        "PAXG:1h": 480,
+        "TAO:1h": 935,
+        "XMR:1h": 1223
+      }
+    },
+    "trades": [],
+    "regime": {
+      "regime": "WEAK_TREND_CONTRACTING_VOL",
+      "confidence": 0.7,
+      "adx": 22.5,
+      "volume_ratio": 0.506
+    }
+  },
+  "deltas_vs_previous": {},
+  "signal_rate_per_min": null,
+  "regime_now": "WEAK_TREND_CONTRACTING_VOL",
+  "notes": "EXPOSURE BREACH: 51.9% > 50% cap"
+}

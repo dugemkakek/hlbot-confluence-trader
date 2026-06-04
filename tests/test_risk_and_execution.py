@@ -498,6 +498,75 @@ class TestPortfolioSummary:
 
 
 # ─────────────────────────────────────────────────────────────────────
+# Regression: exposure_pct must use current equity, not initial_balance
+# (2026-06-04: bug where live bot opened 4 positions and crossed the
+# 50% cap because the denominator was a stale $50 baseline.)
+# ─────────────────────────────────────────────────────────────────────
+
+
+class TestExposurePctDenominator:
+    def test_exposure_pct_uses_current_equity(self):
+        """Even with cash drained below initial_balance, exposure_pct
+        should reflect current equity, not the $50 initial.
+
+        Scenario: initial $50, opened a $40 long, so cash=$10, exposure=$40,
+        equity=$50 (no PnL). exposure_pct should be 40/50 = 80%, NOT 0/50.
+        """
+        async def run():
+            ex = PaperExecutor()
+            ex._cash = 10.0  # cash drained by the long
+            ex._orderbooks["BTC"] = _make_ob("BTC", 100.0, 101.0)
+            async def fake_ticker(sym):
+                return {"last": 100, "bid": 100, "ask": 101}
+            ex._client = type("Fake", (), {})()
+            ex._client.fetch_ticker = fake_ticker
+            # Manually inject a position sized 0.4 (worth $40 at price 100)
+            from src.data.models import Position, OrderSide
+            ex._positions["BTC"] = Position(
+                symbol="BTC", side=OrderSide.LONG, size=0.4,
+                entry_price=100.0, current_price=100.0,
+                unrealized_pnl=0.0, unrealized_pnl_pct=0.0,
+                exposure=40.0,
+                created_at=datetime.now(timezone.utc),
+            )
+            p = ex.get_portfolio()
+            # 40 exposure / 50 equity = 0.80
+            assert p.exposure_pct == pytest.approx(0.80, abs=0.01), (
+                f"exposure_pct={p.exposure_pct} — should be ~0.80 (40/50) "
+                f"not based on initial_balance=$50"
+            )
+            await ex.disconnect()
+        asyncio.run(run())
+
+    def test_exposure_pct_spike_when_equity_drops(self):
+        """If equity drops (e.g. unrealized losses), exposure_pct
+        should INCREASE — that's the point of a real exposure cap.
+        """
+        async def run():
+            ex = PaperExecutor()
+            ex._cash = 30.0
+            from src.data.models import Position, OrderSide
+            # Position with $40 exposure but $20 unrealized loss
+            ex._positions["BTC"] = Position(
+                symbol="BTC", side=OrderSide.LONG, size=0.4,
+                entry_price=100.0, current_price=50.0,  # halved
+                unrealized_pnl=-20.0, unrealized_pnl_pct=-50.0,
+                exposure=20.0,  # 0.4 * 50
+                created_at=datetime.now(timezone.utc),
+            )
+            p = ex.get_portfolio()
+            # equity = 30 + 20 + (-20) = 30
+            # exposure_pct = 20 / 30 = 0.6667
+            assert p.total_equity == pytest.approx(30.0, abs=0.01)
+            assert p.exposure_pct == pytest.approx(0.6667, abs=0.01), (
+                f"exposure_pct={p.exposure_pct} — should be ~0.67 because "
+                f"equity dropped to $30, not 20/50=0.40"
+            )
+            await ex.disconnect()
+        asyncio.run(run())
+
+
+# ─────────────────────────────────────────────────────────────────────
 # RiskManager — peak equity tracking
 # ─────────────────────────────────────────────────────────────────────
 
