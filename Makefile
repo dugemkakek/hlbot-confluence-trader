@@ -9,13 +9,14 @@
 #   make backtest     Run walk-forward backtest
 #   make calibrate    Run strategy calibration sweep
 #   make smoke        Run exchange adapter smoke test
+#   make report       Generate the hourly status report
 #   make run          Start the live bot
 #
 # All targets use the project's Python (`python` on PATH or PYTHON env var).
 
 PYTHON ?= python
 
-.PHONY: help test test-fast test-cov lint backtest calibrate smoke run clean
+.PHONY: help test test-fast test-cov lint backtest calibrate smoke report run clean
 
 help:
 	@echo "HLBot — common targets:"
@@ -49,6 +50,9 @@ calibrate:
 
 smoke:
 	$(PYTHON) scripts/test_adapter_smoke.py
+
+report:
+	$(PYTHON) scripts/hourly_report.py
 
 run:
 	$(PYTHON) -m uvicorn src.api.main:create_app --factory --host 0.0.0.0 --port 8000
