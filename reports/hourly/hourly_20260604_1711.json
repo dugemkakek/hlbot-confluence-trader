@@ -1,0 +1,65 @@
+{
+  "captured_at": "2026-06-04T17:11:34.535347+00:00",
+  "health": {
+    "status": "ok",
+    "pid": 28188
+  },
+  "current": {
+    "portfolio": {
+      "total_equity": 50.0,
+      "cash_balance": 50.0,
+      "unrealized_pnl": 0.0,
+      "realized_pnl": 0.0,
+      "total_pnl": 0.0,
+      "margin_used": 0.0,
+      "exposure": 0.0,
+      "exposure_pct": 0.0,
+      "positions": []
+    },
+    "positions": [],
+    "signals": {
+      "total": 13175,
+      "last_captured": "2026-06-04 17:10:16",
+      "current_cycle": 48,
+      "by_key": {
+        "AAVE:1h": 203,
+        "ACE:1h": 311,
+        "APT:1h": 253,
+        "AR:1h": 915,
+        "ATOM:1h": 1613,
+        "AVAX:1h": 180,
+        "BCH:1h": 677,
+        "BNB:1h": 582,
+        "BSV:1h": 107,
+        "BTC:1h": 2008,
+        "COMP:1h": 469,
+        "DASH:1h": 176,
+        "EIGEN:1h": 952,
+        "ETH:1h": 1379,
+        "PAXG:1h": 617,
+        "TAO:1h": 946,
+        "XMR:1h": 1787
+      }
+    },
+    "trades": [],
+    "regime": {
+      "regime": "LIQUIDITY_CRISIS",
+      "confidence": 0.9,
+      "adx": 50.0678,
+      "volume_ratio": 0.1495
+    }
+  },
+  "deltas_vs_previous": {
+    "elapsed_hours": 0.64,
+    "equity_delta": 0.0,
+    "realized_pnl_delta": 0.0,
+    "unrealized_pnl_delta": -0.01,
+    "new_signals": 321,
+    "new_trades": 0,
+    "positions_count_delta": -4,
+    "regime_change": false
+  },
+  "signal_rate_per_min": 8.36,
+  "regime_now": "LIQUIDITY_CRISIS",
+  "notes": ""
+}

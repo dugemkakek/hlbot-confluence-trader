@@ -553,8 +553,9 @@ class PaperExecutor:
                 timestamp=datetime.now(timezone.utc),
             )
 
-    # legacy alias used by old call sites / external tests
+    # legacy aliases used by old call sites / external tests
     _binance_poll_once = _cex_poll_once
+    _cex_poll_loop = _binance_poll_loop
 
     async def _binance_poll_loop(self) -> None:
         """Background task: poll Binance L2 orderbook for each subscribed symbol.
