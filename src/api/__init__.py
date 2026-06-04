@@ -1,0 +1,1 @@
+"""API package — FastAPI server and WebSocket broadcast."""

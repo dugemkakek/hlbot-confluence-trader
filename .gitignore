@@ -1,0 +1,65 @@
+# ── Claude Code local config (per-user, do not commit) ──
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+.claude/projects/
+
+# ── Python ─────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# ── Virtual envs ──────────────────────────────────────
+venv/
+.venv/
+env/
+ENV/
+
+# ── Test / lint caches ───────────────────────────────
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.tox/
+.cache
+
+# ── IDE ──────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# ── Local data (caches, regenerable) ────────────────
+data/historical/
+data/audit.db
+data/audit.db-*
+data/*.db
+data/*.sqlite
+data/*.sqlite3
+data/captures/
+
+# ── Environment / secrets ───────────────────────────
+.env
+.env.*
+*.pem
+*.key
+secrets/
+
+# ── Live runtime state ──────────────────────────────
+# Keep smoke_24h/ since it has small baseline snapshots
+# used for the 24h smoke test cron
+# But exclude any logs and trading journals
+*.log
+logs/
+trades/
+*.pid

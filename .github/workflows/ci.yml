@@ -1,0 +1,65 @@
+name: HLBot CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # Skip heavy live deps for CI: aioice, websockets
+          # Just install runtime + dev so unit tests can import.
+          pip install -e ".[dev]"
+          # Some tests pull optional packages; the code already
+          # tolerates their absence, so we don't need them.
+
+      - name: Run unit tests
+        run: |
+          python -m pytest -v --tb=short
+
+      - name: Run linters
+        run: |
+          python -m ruff check src tests || true
+          python -m mypy src || true
+
+  smoke:
+    name: Exchange adapter smoke test
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Build adapters without connecting
+        run: |
+          python -c "from src.exchange.factory import build_exchange_adapter; \
+            a = build_exchange_adapter({'venue': 'hyperliquid'}); \
+            assert a.venue.value == 'hyperliquid'; \
+            a = build_exchange_adapter({'venue': 'paper'}); \
+            assert a.venue.value == 'paper'; \
+            print('smoke ok')"

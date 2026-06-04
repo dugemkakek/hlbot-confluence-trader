@@ -1,0 +1,1 @@
+"""Orchestrator package — main trading loop coordinator."""

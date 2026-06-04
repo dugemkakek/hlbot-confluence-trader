@@ -1,0 +1,21 @@
+{
+  "total_return": -0.9335396062967567,
+  "annual_return": -1.0,
+  "annual_volatility": 4.283488368780341,
+  "sharpe_ratio": -0.23345458512000933,
+  "sortino_ratio": -0.18552061394227598,
+  "calmar_ratio": -1.0711918308071404,
+  "max_drawdown": -0.9335396062967568,
+  "max_drawdown_duration_bars": 141,
+  "win_rate": 0.38095238095238093,
+  "profit_factor": 3.4443397999774716,
+  "avg_win": 15.060192650463321,
+  "avg_loss": -2.6907365126646914,
+  "num_trades": 21,
+  "num_wins": 8,
+  "num_losses": 13.0,
+  "avg_bars_held": 130.42857142857142,
+  "exposure_pct_avg": 0.7893615286287983,
+  "final_equity": 664.6039370324331,
+  "initial_capital": 10000.0
+}

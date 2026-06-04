@@ -1,0 +1,94 @@
+hyperliquid:
+  ws_url: "wss://api.hyperliquid.xyz/ws"
+  rest_url: "https://api.hyperliquid.xyz"
+  testnet: false
+  # Optional startup preload (WS orderbook pre-subscription). Discovery is the
+  # source of truth — these are NOT a hardcoded trading universe. Leave empty
+  # to rely entirely on PairDiscoverer.
+  preload_symbols: []
+  timeframes:
+    - "1m"
+    - "5m"
+    - "15m"
+    - "1h"
+    - "4h"
+    - "1d"
+
+database:
+  host: "localhost"
+  port: 5432
+  name: "trading_ai"
+  user: "postgres"
+  password: "postgres"
+  pool_size: 10
+  pool_timeout: 30
+
+redis:
+  host: "localhost"
+  port: 6379
+  db: 0
+  password: null
+  max_connections: 20
+
+executor:
+  slippage_base_bps: 1.5
+  maker_fee_bps: 2.0
+  taker_fee_bps: 3.5
+  initial_balance: 50.0
+  order_timeout_seconds: 30
+
+risk:
+  max_position_pct: 0.20
+  max_portfolio_exposure: 0.50
+  max_drawdown_pct: 0.15
+  stop_loss_pct: 0.02
+  take_profit_pct: 0.04
+  max_leverage: 1
+  max_daily_trades: 20
+
+engine:
+  cycle_interval_seconds: 60
+  # 2026-06-02 audit: max achievable final_score in production
+  # data is ~0.26 (sentiment=0.5 fallback + max momentum + max
+  # vol_regime), so the original 0.60 threshold made the decision
+  # engine a permanent NO_TRADE. Lowered to 0.20 to let the
+  # engine contribute to the trade pipeline. See
+  # reports/DECISION_ENGINE_AUDIT_2026_06_02.md.
+  min_signal_confidence: 0.20
+  warmup_candles: 100
+
+api:
+  host: "0.0.0.0"
+  port: 8000
+  cors_origins:
+    - "http://localhost:3000"
+    - "http://localhost:5173"
+  rate_limit_per_minute: 60
+
+orchestrator:
+  cycle_interval_seconds: 60
+  timeframes:
+    - "1h"
+    - "4h"
+    - "1d"
+  dry_run: true  # paper trading mode — no real orders
+  # NOTE: no `symbols` here — pair universe is discovered dynamically each
+  # cycle by PairDiscoverer (see src/signals/pair_discovery.py).
+
+scanner:
+  max_pairs_per_cycle: 5      # candles fetched for only top 5
+  rough_filter_max: 10        # candles fetched for only top 10 (no candles needed for rough ranking)
+  min_sz_decimals: 4          # szDecimals from universe as liquidity proxy
+  min_confluence_score: 0.35
+  pair_filter: ["*"]
+  exclude_coins: ["USDC", "USDT", "FEE", "GFC", "JTO"]
+  min_volume_24h_usd: 10000
+
+audit:
+  db_path: "data/audit.db"
+  retention_days: 90          # rows older than this can be pruned via prune_old_entries()
+
+logging:
+  level: "DEBUG"
+  format: "json"
+  output: "stdout"

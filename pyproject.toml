@@ -1,0 +1,59 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "wing-trading-ai"
+version = "0.1.0"
+description = "Autonomous crypto trading AI infrastructure — Phase 1"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+    { name = "Wing Trading AI Team" }
+]
+dependencies = [
+    "aiohttp>=3.9.0",
+    "aioice>=0.9.0",
+    "asyncpg>=0.29.0",
+    "fastapi>=0.109.0",
+    "httpx>=0.26.0",
+    "pandas>=2.1.0",
+    "polars>=0.20.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "redis>=5.0.0",
+    "structlog>=24.1.0",
+    "uvicorn[standard]>=0.25.0",
+    "websockets>=12.0",
+    "pyyaml>=6.0.1",
+    "numpy>=1.26.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.1.0",
+    "ruff>=0.1.0",
+    "mypy>=1.8.0",
+    "ccxt>=4.0.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true

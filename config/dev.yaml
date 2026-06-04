@@ -1,0 +1,37 @@
+# Dev environment overrides
+database:
+  host: "localhost"
+  name: "trading_ai_dev"
+  pool_size: 5
+
+redis:
+  host: "localhost"
+
+executor:
+  initial_balance: 50.0
+  dry_run: true
+  max_trades_per_hour: 2
+  max_position_pct: 0.20
+
+# Optional preload for warm-start orderbook subscription. Empty = rely entirely
+# on PairDiscoverer. Uncomment to preload a few majors for instant first cycle.
+# hyperliquid:
+#   preload_symbols:
+#     - "BTC"
+#     - "ETH"
+#     - "SOL"
+
+orchestrator:
+  cycle_interval_seconds: 30
+
+scanner:
+  rough_filter_max: 20
+  min_sz_decimals: 1
+  min_confluence_score: 0.35
+  min_confirmations: 2
+
+logging:
+  level: "DEBUG"
+
+api:
+  port: 8001

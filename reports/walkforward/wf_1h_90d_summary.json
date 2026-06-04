@@ -1,0 +1,12 @@
+{
+  "label": "wf_1h_90d",
+  "interval": "1h",
+  "n_windows": 4,
+  "oos_wins": 4,
+  "oos_win_rate": 1.0,
+  "avg_train_return": 0.12881640359889193,
+  "avg_oos_return": 0.2288458655311092,
+  "compounded_oos": 1.7063264162641367,
+  "train_oos_gap": -0.10002946193221726,
+  "verdict": "\ud83d\udfe2 ROBUST EDGE: profitable in >60% of OOS windows with positive avg return"
+}

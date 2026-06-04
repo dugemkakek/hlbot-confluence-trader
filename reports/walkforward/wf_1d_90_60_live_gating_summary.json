@@ -1,0 +1,12 @@
+{
+  "label": "wf_1d_90_60_live_gating",
+  "interval": "1d",
+  "n_windows": 12,
+  "oos_wins": 4,
+  "oos_win_rate": 0.3333333333333333,
+  "avg_train_return": 0.007142191468187102,
+  "avg_oos_return": 2.6929314002786347e-05,
+  "compounded_oos": -0.031346493775605055,
+  "train_oos_gap": 0.007115262154184315,
+  "verdict": "\u274c NO EDGE: unprofitable in majority of OOS windows"
+}
