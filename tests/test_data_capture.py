@@ -160,3 +160,65 @@ def test_get_candles_time_filter(capture):
         end=base + timedelta(hours=2),
     )
     assert len(rows) == 2
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Persistent signals summary (used by /api/v1/signals to survive
+# bot restarts — see reports/smoke_24h/after_24h.json for context)
+# ─────────────────────────────────────────────────────────────────────
+
+
+def test_signals_summary_empty(capture):
+    """Empty capture returns zero counts and no symbols."""
+    summary = capture.get_signals_summary()
+    assert summary["total_signals"] == 0
+    assert summary["symbols"] == []
+    assert summary["by_key"] == {}
+    assert summary["first_seen"] is None
+    assert summary["last_seen"] is None
+
+
+def test_signals_summary_after_captures(capture):
+    """Captures from multiple symbols/timeframes aggregate correctly."""
+    base = datetime(2026, 6, 4, 10, 0, 0, tzinfo=timezone.utc)
+    # 3 BTC 1h signals, 2 BTC 4h, 1 ETH 1h
+    for i in range(3):
+        capture.capture_signal(
+            base + timedelta(minutes=i), "BTC", "1h",
+            "rsi", "buy", 0.5 + i * 0.05, {"k": i},
+        )
+    for i in range(2):
+        capture.capture_signal(
+            base + timedelta(minutes=10 + i), "BTC", "4h",
+            "sma_cross", "buy", 0.6, {},
+        )
+    capture.capture_signal(
+        base + timedelta(minutes=20), "ETH", "1h",
+        "rsi", "sell", 0.4, {},
+    )
+
+    summary = capture.get_signals_summary()
+    assert summary["total_signals"] == 6
+    assert summary["symbols"] == ["BTC", "ETH"]
+    assert summary["by_key"] == {"BTC:1h": 3, "BTC:4h": 2, "ETH:1h": 1}
+    # first/last seen bound the row range
+    assert summary["first_seen"] is not None
+    assert summary["last_seen"] is not None
+
+
+def test_signals_summary_window_filter(capture):
+    """Optional start/end window narrows the count and bounds."""
+    base = datetime(2026, 6, 4, 0, 0, 0, tzinfo=timezone.utc)
+    for hour in range(5):
+        capture.capture_signal(
+            base + timedelta(hours=hour), "BTC", "1h",
+            "rsi", "buy", 0.5, {},
+        )
+    # Window covers hours 1-3 (3 rows)
+    summary = capture.get_signals_summary(
+        start=base + timedelta(hours=1),
+        end=base + timedelta(hours=3, minutes=59),
+    )
+    assert summary["total_signals"] == 3
+    assert summary["by_key"] == {"BTC:1h": 3}
+

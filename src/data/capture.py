@@ -450,6 +450,87 @@ class DataCapture:
             logger.debug("get_performance_curve failed", error=str(exc))
             return []
 
+    def get_signals_summary(
+        self,
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Persistent signals summary.
+
+        Returns the same shape as `SignalRegistry.summary()` but
+        reads from SQLite, so the count survives bot restarts.
+
+        Keys:
+          - total_signals: COUNT(*) of all rows (within the window if
+            start/end given)
+          - symbols: distinct symbols that emitted any signal
+          - by_key: count grouped by `"{symbol}:{timeframe}"`
+          - first_seen / last_seen: window bounds on the SIGNAL
+            timestamp (the candle's close time). Note: also exposed
+            via `last_captured` for the write time (more useful for
+            "is the bot still writing?" checks).
+        """
+        if self._init_failed or self._conn is None:
+            return {
+                "total_signals": 0, "symbols": [], "by_key": {},
+                "first_seen": None, "last_seen": None,
+                "last_captured": None, "first_captured": None,
+            }
+        where = ["1=1"]
+        params: list[Any] = []
+        if start is not None:
+            where.append("timestamp >= ?")
+            params.append(_to_iso(start))
+        if end is not None:
+            where.append("timestamp <= ?")
+            params.append(_to_iso(end))
+        where_sql = f"WHERE {' AND '.join(where)}"
+        try:
+            with self._cursor() as cur:
+                total = cur.execute(
+                    f"SELECT COUNT(*) FROM signals {where_sql}", params
+                ).fetchone()[0]
+                syms = [
+                    r[0] for r in cur.execute(
+                        f"SELECT DISTINCT symbol FROM signals {where_sql} "
+                        f"ORDER BY symbol", params
+                    ).fetchall()
+                ]
+                by_key = {
+                    r[0]: r[1] for r in cur.execute(
+                        f"SELECT symbol || ':' || timeframe AS k, COUNT(*) "
+                        f"FROM signals {where_sql} "
+                        f"GROUP BY k ORDER BY k", params
+                    ).fetchall()
+                }
+                bounds = cur.execute(
+                    f"SELECT MIN(timestamp), MAX(timestamp) FROM signals {where_sql}",
+                    params,
+                ).fetchone()
+                # created_at is the WRITE time (default datetime('now')),
+                # which is what you want to confirm the bot is still
+                # persisting live.
+                write_bounds = cur.execute(
+                    f"SELECT MIN(created_at), MAX(created_at) FROM signals {where_sql}",
+                    params,
+                ).fetchone()
+            return {
+                "total_signals": int(total),
+                "symbols": syms,
+                "by_key": by_key,
+                "first_seen": bounds[0] if bounds and bounds[0] is not None else None,
+                "last_seen": bounds[1] if bounds and bounds[1] is not None else None,
+                "first_captured": write_bounds[0] if write_bounds and write_bounds[0] is not None else None,
+                "last_captured": write_bounds[1] if write_bounds and write_bounds[1] is not None else None,
+            }
+        except Exception as exc:
+            logger.debug("get_signals_summary failed", error=str(exc))
+            return {
+                "total_signals": 0, "symbols": [], "by_key": {},
+                "first_seen": None, "last_seen": None,
+                "last_captured": None, "first_captured": None,
+            }
+
     def stats(self) -> dict[str, int]:
         """Row counts for monitoring."""
         if self._init_failed or self._conn is None:

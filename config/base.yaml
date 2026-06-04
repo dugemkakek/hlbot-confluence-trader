@@ -79,7 +79,12 @@ scanner:
   max_pairs_per_cycle: 5      # candles fetched for only top 5
   rough_filter_max: 10        # candles fetched for only top 10 (no candles needed for rough ranking)
   min_sz_decimals: 4          # szDecimals from universe as liquidity proxy
-  min_confluence_score: 0.35
+  # 2026-06-04: lowered from 0.35 → 0.25. The confluence engine produces
+  # scores in the 0.10-0.40 range; 0.35 was filtering out everything
+  # except 1-2 symbols, which meant the bot held those positions and
+  # never added new ones. At 0.25 the ranker surfaces 5-8 actionable
+  # pairs per cycle, which is what max_pairs_per_cycle=5 expects.
+  min_confluence_score: 0.25
   pair_filter: ["*"]
   exclude_coins: ["USDC", "USDT", "FEE", "GFC", "JTO"]
   min_volume_24h_usd: 10000

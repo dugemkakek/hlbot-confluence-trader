@@ -251,10 +251,40 @@ def create_app() -> FastAPI:
 
     # ── Signals ──────────────────────────────────────────────────────────────
     @app.get("/api/v1/signals", response_model=dict[str, Any], tags=["Signals"])
-    async def get_signals() -> dict[str, Any]:
-        """Current signals summary from the registry."""
-        reg = _get_registry(state)
-        return reg.summary()
+    async def get_signals(
+        start: str | None = None,
+        end: str | None = None,
+    ) -> dict[str, Any]:
+        """Persistent signals summary backed by SQLite.
+
+        Counts and symbols survive bot restarts (the in-memory
+        `SignalRegistry` clears per cycle). Optional `start`/`end`
+        ISO-8601 timestamps filter the window. Without them, returns
+        all-time totals.
+        """
+        from datetime import datetime
+        from ..data.capture import get_data_capture
+        cap = get_data_capture()
+        # Fall back to in-memory if the capture writer never initialised
+        # (e.g. SQLite unavailable). That preserves the old behaviour.
+        if cap._init_failed:
+            reg = _get_registry(state)
+            return reg.summary()
+        s = datetime.fromisoformat(start) if start else None
+        e = datetime.fromisoformat(end) if end else None
+        summary = cap.get_signals_summary(start=s, end=e)
+        # Also surface the in-memory current-cycle count under
+        # "current_cycle" so callers can see what's live vs historical.
+        try:
+            reg = _get_registry(state)
+            mem = reg.summary()
+            summary["current_cycle"] = mem.get("total_signals", 0)
+            summary["current_symbols"] = mem.get("symbols", [])
+        except Exception:
+            summary["current_cycle"] = 0
+            summary["current_symbols"] = []
+        summary["source"] = "sqlite"
+        return summary
 
     @app.get("/api/v1/regime/{symbol}", response_model=dict[str, Any], tags=["Signals"])
     async def get_regime(symbol: str) -> dict[str, Any]:

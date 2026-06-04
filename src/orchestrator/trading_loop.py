@@ -598,12 +598,14 @@ class TradingOrchestrator:
                 metadata=struct_sig["metadata"],
             )
             self.signal_registry.register_signal(sig)
+            self._persist_signal(sig)
 
         # ── Pullback detection ──────────────────────────────────────────────────
         pullback_sig = self.pullback_detector.detect_pullback(symbol, primary_tf, structure_result)
         if pullback_sig:
             pb_signal = self.pullback_detector.to_signal(pullback_sig)
             self.signal_registry.register_signal(pb_signal)
+            self._persist_signal(pb_signal)
 
         # ── Compute technical signals ───────────────────────────────────────────
         self._compute_signals(symbol, tf, primary_tf)
@@ -936,6 +938,28 @@ class TradingOrchestrator:
             positions_checked=len(position_symbols),
         )
 
+    def _persist_signal(self, sig, ts: datetime | None = None) -> None:
+        """Best-effort write of a signal to the persistent data layer.
+
+        Used by every code path that calls `signal_registry.register_signal`,
+        so the SQLite-backed `/api/v1/signals` count matches the in-memory
+        registry. Never raises — capture failures must not break trading.
+        """
+        try:
+            from ..data.capture import get_data_capture
+            cap = get_data_capture()
+            cap.capture_signal(
+                timestamp=ts or sig.timestamp,
+                symbol=sig.symbol,
+                timeframe=sig.timeframe.value,
+                name=sig.name,
+                direction=sig.direction.value,
+                confidence=sig.confidence,
+                metadata=sig.metadata,
+            )
+        except Exception as exc:
+            logger.debug("Signal capture skipped", symbol=sig.symbol, error=str(exc))
+
     def _compute_signals(self, symbol: str, timeframe: TimeFrame, candles: list[NormalizedCandle]) -> None:
         """Compute technical signals and register them."""
         computed = []
@@ -971,22 +995,9 @@ class TradingOrchestrator:
 
         # Capture every signal to the data layer (post-hoc
         # analysis: which signals are most predictive?).
-        try:
-            from ..data.capture import get_data_capture
-            cap = get_data_capture()
-            ts = candles[-1].timestamp if candles else None
-            for sig in computed:
-                cap.capture_signal(
-                    timestamp=ts,
-                    symbol=sig.symbol,
-                    timeframe=sig.timeframe.value,
-                    name=sig.name,
-                    direction=sig.direction.value,
-                    confidence=sig.confidence,
-                    metadata=sig.metadata,
-                )
-        except Exception as exc:
-            logger.debug("Signal capture skipped", error=str(exc))
+        ts = candles[-1].timestamp if candles else None
+        for sig in computed:
+            self._persist_signal(sig, ts=ts)
 
         logger.debug(
             "Signals computed",

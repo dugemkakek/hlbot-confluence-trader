@@ -1,0 +1,91 @@
+{
+  "computed_at": "2026-06-04T09:04:20.227344+00:00",
+  "baseline_at": "2026-06-03T15:34:16.320738+00:00",
+  "elapsed_hours": 17.5,
+  "health": {
+    "pid": 9712,
+    "status": "ok"
+  },
+  "deltas": {
+    "new_signals": -2163,
+    "signals_per_hour": -123.6,
+    "new_trades_closed": 0,
+    "new_positions_open": -1,
+    "realized_pnl_delta": 0.01,
+    "equity_delta": -15.61
+  },
+  "current": {
+    "equity": 49.99,
+    "cash": 43.0,
+    "realized_pnl": 0.0,
+    "unrealized_pnl": -0.0,
+    "exposure": 7.0,
+    "exposure_pct": 0.1399,
+    "positions": [
+      {
+        "symbol": "ATOM",
+        "side": "LONG",
+        "size": 3.9318146279854065,
+        "entry": 1.7799503774547014,
+        "uPnL": -0.0021513303142666014
+      }
+    ],
+    "trades_closed": 0,
+    "signals": 27,
+    "symbols": [
+      "AR",
+      "ATOM",
+      "PAXG",
+      "XMR"
+    ],
+    "btc_regime": "WEAK_TREND_CONTRACTING_VOL",
+    "btc_adx": 21.0861
+  },
+  "baseline": {
+    "equity": 65.6,
+    "realized_pnl": -0.01,
+    "positions": [
+      {
+        "symbol": "ATOM",
+        "side": "SHORT"
+      },
+      {
+        "symbol": "AAVE",
+        "side": "SHORT"
+      }
+    ],
+    "signals": 2190,
+    "btc_regime": "LIQUIDITY_CRISIS"
+  },
+  "per_symbol_signals_delta": {
+    "AAVE:1h": -39,
+    "ACE:1h": -205,
+    "APT:1h": -210,
+    "AR:1h": 3,
+    "ATOM:1h": -446,
+    "AVAX:1h": -95,
+    "BCH:1h": -62,
+    "BTC:1h": -378,
+    "COMP:1h": -115,
+    "DASH:1h": -5,
+    "EIGEN:1h": -136,
+    "ETH:1h": -138,
+    "PAXG:1h": -119,
+    "TAO:1h": -220,
+    "XMR:1h": 2
+  },
+  "new_symbols_added": [],
+  "verdict_lines": [
+    "Elapsed: 17.5h",
+    "New signals: -2163 (-124/h, target ~7308)",
+    "New positions opened: -1",
+    "New trades closed: 0",
+    "Realized PnL delta: $+0.0100",
+    "Equity delta: $-15.6100",
+    "BTC regime: LIQUIDITY_CRISIS -> WEAK_TREND_CONTRACTING_VOL",
+    "",
+    "VERDICT: LOW - fewer signals than expected (target ~14.5% actionable)"
+  ],
+  "bot_restarted": true,
+  "restart_note": "Bot was restarted with new ranker threshold (0.35 -> 0.25) at ~08:58 UTC. Positions in baseline (ATOM SHORT, AAVE SHORT) lost on restart (in-memory paper). After restart, new positions opened."
+}

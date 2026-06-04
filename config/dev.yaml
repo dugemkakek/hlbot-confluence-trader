@@ -27,7 +27,11 @@ orchestrator:
 scanner:
   rough_filter_max: 20
   min_sz_decimals: 1
-  min_confluence_score: 0.35
+  # 2026-06-04: lowered from 0.35 → 0.25 (matches base.yaml).
+  # The confluence engine produces 0.10–0.40 scores; 0.35 filtered
+  # out everything except 1–2 symbols. See base.yaml for the full
+  # rationale.
+  min_confluence_score: 0.25
   min_confirmations: 2
 
 logging:
