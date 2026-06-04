@@ -537,6 +537,85 @@ class TestBinanceSymbolMapping:
 
 
 # ─────────────────────────────────────────────────────────────────────
+# Regression: position current_price must update with orderbook,
+# not freeze at fill price. (2026-06-05: live bot positions showed
+# uPnL = $0.00 hours after fill because the orderbook polling
+# never fed the position's current_price field.)
+# ─────────────────────────────────────────────────────────────────────
+
+
+class TestPositionPriceRefresh:
+    def test_refresh_unrealized_updates_current_price(self):
+        """After _refresh_unrealized_pnl, the position's current_price
+        should match the latest market price, and uPnL should reflect
+        the move.
+        """
+        async def run():
+            ex = PaperExecutor()
+            ex._cash = 10_000.0
+            ex._orderbooks["BTC"] = _make_ob("BTC", 100.0, 101.0)
+
+            # Inject a position manually so we can drive the refresh
+            from src.data.models import Position, OrderSide
+            ex._positions["BTC"] = Position(
+                symbol="BTC", side=OrderSide.LONG, size=0.5,
+                entry_price=100.0, current_price=100.0,
+                unrealized_pnl=0.0, unrealized_pnl_pct=0.0,
+                exposure=50.0,
+                created_at=datetime.now(timezone.utc),
+            )
+
+            # Price moves to 110 (no fill, just a market move)
+            ex._refresh_unrealized_pnl(110.0, "BTC")
+            p = ex.get_portfolio()
+            assert p.positions[0].current_price == pytest.approx(110.0, abs=0.01)
+            # 0.5 size * (110 - 100) = $5.00 unrealized
+            assert p.positions[0].unrealized_pnl == pytest.approx(5.0, abs=0.01)
+            # PnL pct = 5 / (0.5 * 100) = 10%
+            assert p.positions[0].unrealized_pnl_pct == pytest.approx(10.0, abs=0.1)
+            await ex.disconnect()
+        asyncio.run(run())
+
+    def test_poll_loop_refreshes_position_price(self):
+        """End-to-end: after _cex_poll_once runs and feeds a fresh
+        orderbook, the position's current_price should track.
+        """
+        async def run():
+            ex = PaperExecutor()
+            ex._cash = 10_000.0
+            ex._orderbooks["BTC"] = _make_ob("BTC", 100.0, 101.0)
+
+            from src.data.models import Position, OrderSide
+            ex._positions["BTC"] = Position(
+                symbol="BTC", side=OrderSide.LONG, size=0.5,
+                entry_price=100.0, current_price=100.0,
+                unrealized_pnl=0.0, unrealized_pnl_pct=0.0,
+                exposure=50.0,
+                created_at=datetime.now(timezone.utc),
+            )
+
+            # Simulate the polling loop with a fresh orderbook at 110
+            class _StubCCXT:
+                def __init__(self, bids, asks):
+                    self._bids = bids
+                    self._asks = asks
+                async def fetch_order_book(self, sym, limit=20):
+                    return {"bids": self._bids, "asks": self._asks}
+
+            ex._cex_client = _StubCCXT(
+                bids=[[110.0, 1.0], [109.5, 2.0]],
+                asks=[[110.5, 1.0], [111.0, 2.0]],
+            )
+            ex._cex_subscribed = {"BTC"}
+            await ex._cex_poll_once()
+            p = ex.get_portfolio()
+            # Mid = (110 + 110.5) / 2 = 110.25
+            assert p.positions[0].current_price == pytest.approx(110.25, abs=0.01)
+            await ex.disconnect()
+        asyncio.run(run())
+
+
+# ─────────────────────────────────────────────────────────────────────
 # Regression: exposure_pct must use current equity, not initial_balance
 # (2026-06-04: bug where live bot opened 4 positions and crossed the
 # 50% cap because the denominator was a stale $50 baseline.)

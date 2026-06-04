@@ -1,0 +1,199 @@
+{
+  "captured_at": "2026-06-04T21:33:09.018860+00:00",
+  "health": {
+    "status": "ok",
+    "pid": 18204
+  },
+  "current": {
+    "portfolio": {
+      "total_equity": 61.61,
+      "cash_balance": 40.07,
+      "unrealized_pnl": 0.04,
+      "realized_pnl": -0.01,
+      "total_pnl": 0.03,
+      "margin_used": 0.0,
+      "exposure": 21.51,
+      "exposure_pct": 0.349,
+      "positions": [
+        {
+          "symbol": "EIGEN",
+          "side": "LONG",
+          "size": 54.90274922639698,
+          "entry_price": 0.1923058520271404,
+          "current_price": 0.1930009794085992,
+          "unrealized_pnl": 0.03816440430463442,
+          "unrealized_pnl_pct": 0.36146969742797763,
+          "exposure": 10.596284372919328,
+          "created_at": "2026-06-04T17:18:33.589289Z"
+        },
+        {
+          "symbol": "ATOM",
+          "side": "SHORT",
+          "size": 0.5255326131722342,
+          "entry_price": 1.818509328346177,
+          "current_price": 1.8189985864273115,
+          "unrealized_pnl": -0.0002571210778942073,
+          "unrealized_pnl_pct": -0.026904348166273927,
+          "exposure": 0.9559430804817451,
+          "created_at": "2026-06-04T18:00:19.539408Z"
+        },
+        {
+          "symbol": "COMP",
+          "side": "LONG",
+          "size": 0.1453328511993676,
+          "entry_price": 17.320009904237445,
+          "current_price": 17.320009904237445,
+          "unrealized_pnl": 0.0,
+          "unrealized_pnl_pct": 0.0,
+          "exposure": 2.5171664221841135,
+          "created_at": "2026-06-04T18:01:02.241828Z"
+        },
+        {
+          "symbol": "XMR",
+          "side": "LONG",
+          "size": 0.007433764190218675,
+          "entry_price": 348.31004504655596,
+          "current_price": 348.31004504655596,
+          "unrealized_pnl": 0.0,
+          "unrealized_pnl_pct": 0.0,
+          "exposure": 2.5892547399605412,
+          "created_at": "2026-06-04T18:01:02.892874Z"
+        },
+        {
+          "symbol": "TAO",
+          "side": "SHORT",
+          "size": 0.009107138704797513,
+          "entry_price": 218.79996867943757,
+          "current_price": 218.79996867943757,
+          "unrealized_pnl": 0.0,
+          "unrealized_pnl_pct": 0.0,
+          "exposure": 1.9926416633689894,
+          "created_at": "2026-06-04T19:00:05.028551Z"
+        },
+        {
+          "symbol": "BTC",
+          "side": "SHORT",
+          "size": 4.474187672477461e-05,
+          "entry_price": 63805.59935981255,
+          "current_price": 63805.59935981255,
+          "unrealized_pnl": 0.0,
+          "unrealized_pnl_pct": 0.0,
+          "exposure": 2.8547822609070908,
+          "created_at": "2026-06-04T19:00:05.038072Z"
+        }
+      ]
+    },
+    "positions": [
+      {
+        "symbol": "EIGEN",
+        "side": "LONG",
+        "size": 54.90274922639698,
+        "entry": 0.1923058520271404,
+        "current": 0.1930009794085992,
+        "uPnL": 0.03816440430463442,
+        "uPnL_pct": 0.36146969742797763,
+        "exposure": 10.596284372919328,
+        "opened_at": "2026-06-04T17:18:33.589289Z"
+      },
+      {
+        "symbol": "ATOM",
+        "side": "SHORT",
+        "size": 0.5255326131722342,
+        "entry": 1.818509328346177,
+        "current": 1.8189985864273115,
+        "uPnL": -0.0002571210778942073,
+        "uPnL_pct": -0.026904348166273927,
+        "exposure": 0.9559430804817451,
+        "opened_at": "2026-06-04T18:00:19.539408Z"
+      },
+      {
+        "symbol": "COMP",
+        "side": "LONG",
+        "size": 0.1453328511993676,
+        "entry": 17.320009904237445,
+        "current": 17.320009904237445,
+        "uPnL": 0.0,
+        "uPnL_pct": 0.0,
+        "exposure": 2.5171664221841135,
+        "opened_at": "2026-06-04T18:01:02.241828Z"
+      },
+      {
+        "symbol": "XMR",
+        "side": "LONG",
+        "size": 0.007433764190218675,
+        "entry": 348.31004504655596,
+        "current": 348.31004504655596,
+        "uPnL": 0.0,
+        "uPnL_pct": 0.0,
+        "exposure": 2.5892547399605412,
+        "opened_at": "2026-06-04T18:01:02.892874Z"
+      },
+      {
+        "symbol": "TAO",
+        "side": "SHORT",
+        "size": 0.009107138704797513,
+        "entry": 218.79996867943757,
+        "current": 218.79996867943757,
+        "uPnL": 0.0,
+        "uPnL_pct": 0.0,
+        "exposure": 1.9926416633689894,
+        "opened_at": "2026-06-04T19:00:05.028551Z"
+      },
+      {
+        "symbol": "BTC",
+        "side": "SHORT",
+        "size": 4.474187672477461e-05,
+        "entry": 63805.59935981255,
+        "current": 63805.59935981255,
+        "uPnL": 0.0,
+        "uPnL_pct": 0.0,
+        "exposure": 2.8547822609070908,
+        "opened_at": "2026-06-04T19:00:05.038072Z"
+      }
+    ],
+    "signals": {
+      "total": 15345,
+      "last_captured": "2026-06-04 21:32:57",
+      "current_cycle": 2123,
+      "by_key": {
+        "AAVE:1h": 378,
+        "ACE:1h": 320,
+        "APT:1h": 258,
+        "AR:1h": 923,
+        "ATOM:1h": 1898,
+        "AVAX:1h": 193,
+        "BCH:1h": 678,
+        "BNB:1h": 678,
+        "BSV:1h": 107,
+        "BTC:1h": 2562,
+        "COMP:1h": 584,
+        "DASH:1h": 191,
+        "EIGEN:1h": 1324,
+        "ETH:1h": 1671,
+        "PAXG:1h": 628,
+        "TAO:1h": 1157,
+        "XMR:1h": 1795
+      }
+    },
+    "trades": [],
+    "regime": {
+      "regime": "STRONG_TREND_STABLE_VOL",
+      "confidence": 0.65,
+      "adx": 57.69,
+      "volume_ratio": 1.2677
+    }
+  },
+  "deltas_vs_previous": {
+    "elapsed_hours": 1.0,
+    "equity_delta": 0.0,
+    "realized_pnl_delta": 0.0,
+    "unrealized_pnl_delta": 0.0,
+    "new_signals": 546,
+    "new_trades": 0,
+    "positions_count_delta": 0,
+    "regime_change": false
+  },
+  "signal_rate_per_min": 9.1,
+  "regime_now": "STRONG_TREND_STABLE_VOL",
+  "notes": ""
+}

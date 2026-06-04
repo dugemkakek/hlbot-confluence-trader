@@ -553,6 +553,15 @@ class PaperExecutor:
                 timestamp=datetime.now(timezone.utc),
             )
 
+            # 2026-06-05: refresh the position's current_price from
+            # the freshest orderbook so uPnL tracks reality. Without
+            # this, current_price freezes at the last fill price
+            # until the next fill on the same symbol, which means
+            # SL/TP checks against stale data.
+            if hl_symbol in self._positions and bids and asks:
+                mid = (bids[0].price + asks[0].price) / 2
+                self._refresh_unrealized_pnl(mid, hl_symbol)
+
     # legacy aliases used by old call sites / external tests
     _binance_poll_once = _cex_poll_once
     _cex_poll_loop = _binance_poll_loop
@@ -603,6 +612,15 @@ class PaperExecutor:
                 asks=asks,
                 timestamp=datetime.now(timezone.utc),
             )
+
+            # 2026-06-05: refresh the position's current_price from
+            # the freshest orderbook so uPnL tracks reality. Without
+            # this, current_price freezes at the last fill price
+            # until the next fill on the same symbol, which means
+            # SL/TP checks against stale data.
+            if hl_symbol in self._positions and bids and asks:
+                mid = (bids[0].price + asks[0].price) / 2
+                self._refresh_unrealized_pnl(mid, hl_symbol)
 
     def get_orderbook(self, symbol: str) -> OrderbookSnapshot | None:
         """Return cached orderbook snapshot for a symbol, or None."""
