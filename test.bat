@@ -9,9 +9,10 @@ REM   test smoke      -> run exchange adapter smoke test
 REM   test backtest   -> run walk-forward backtest
 REM   test calibrate  -> run strategy calibration sweep
 REM   test run        -> start the live bot
+REM Requires: Python 3.11+ on PATH (or py launcher)
 
 setlocal
-set PYTHON=C:\Users\luc18\AppData\Local\Programs\Python\Python314\python.exe
+set PYTHON=py -3
 
 if "%1"=="" goto :test
 if "%1"=="fast" goto :fast

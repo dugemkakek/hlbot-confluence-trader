@@ -1,7 +1,15 @@
 # ── Claude Code local config (per-user, do not commit) ──
+.claude/
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
 .claude/projects/
+.claude/skills/
+
+# ── Personal/operational handoff docs (not for public release) ──
+AUTO_MODE_HANDOFF_*.md
+README_INTERNAL.md
+reports/DECISION_ENGINE_AUDIT_*.md
+reports/hourly/
 
 # ── Python ─────────────────────────────────────────────
 __pycache__/
