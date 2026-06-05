@@ -178,14 +178,35 @@ class BacktestStrategy:
                 candles=primary_tf,
             )
 
+            # v0.2.0: detect the regime for this symbol/bar so the
+            # override path can consult it. Mirrors the live
+            # orchestrator's regime detection in
+            # trading_loop._evaluate_ranked_pair. We do this here
+            # (instead of inside the override check) so it's also
+            # available to log when the override is suppressed.
+            regime_analysis = self.regime_detector.detect(
+                primary_tf, sym, TimeFrame.H1
+            )
+
             # Apply the production override path:
             # if the ranker says actionable with a direction but the
             # decision engine said NO_TRADE, force a trade.
+            # v0.2.0: stricter confluence floor (0.50) + regime-direction
+            # compatibility check. See CHANGELOG.md and
+            # trading_loop.direction_matches_regime for the rules.
+            from ..orchestrator.trading_loop import (
+                OVERRIDE_MIN_CONFLUENCE,
+                direction_matches_regime,
+            )
             actionable = (
                 ranked.is_actionable
                 and ranked.direction is not None
-                and ranked.confluence_score >= self.min_confluence
+                and ranked.confluence_score >= OVERRIDE_MIN_CONFLUENCE
             )
+            allowed, suppress_reason = direction_matches_regime(
+                ranked.direction, regime_analysis
+            )
+            actionable = actionable and allowed
             logger.info(
                 "ranker decision",
                 symbol=sym,
@@ -193,8 +214,10 @@ class BacktestStrategy:
                 ranked_dir=ranked.direction,
                 ranked_actionable=ranked.is_actionable,
                 decision_action=decision.action,
-                threshold=self.min_confluence,
+                threshold=OVERRIDE_MIN_CONFLUENCE,
                 passes_threshold=actionable,
+                regime=regime_analysis.regime.value,
+                suppress_reason=suppress_reason if not allowed else "compatible",
             )
             if actionable or ranked.confluence_score > 0.15:
                 print(

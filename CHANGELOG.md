@@ -9,6 +9,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — 2026-06-06 (v0.2.0 — strategy direction bias + risk caps)
+
+Build bumped to **0.2.0** (`pyproject.toml`, `src/__init__.py`).
+This release addresses the 2026-06-05 01:33 UTC incident where the
+live bot on Gate.io paper opened 14 SHORT positions in 1.5 hours
+across a bearish regime. Two of the three root-cause layers are
+repaired in this release; the third (position-replace scaling
+bypass) is still open and tracked in the post-mortem.
+
+**Risk cap hardening** (commit bbf72ee, carried into v0.2.0):
+
+| Change | File | Old | New |
+|---|---|---|---|
+| `risk.max_positions` cap (default 4) wired into `pre_trade_check` step 6a | `risk/risk_manager.py`, `config/dev.yaml`, `utils/config.py` | absent | `max_positions: int = 4` |
+| `max_daily_trades` | `config/dev.yaml` | 20 | 10 |
+| `min_confluence_score` | `config/dev.yaml` | 0.25 | 0.35 |
+| `min_confirmations` (orchestrator) | already 2 from earlier fix | 2 | 2 (kept) |
+| Daily-loss / correlation / pnl-pct denominators | `risk/risk_manager.py` | `initial_balance` | `total_equity` (same bug class as f5247e9 exposure_pct fix) |
+| Venue | `config/dev.yaml` | `hyperliquid` | `gate` (paper mode, no API keys) |
+
+Tests: 34 new (`tests/test_risk_and_execution.py`), 167/167 pass.
+
+**Strategy direction bias fix** (this commit):
+
+The 30-day calibration sweep exposed a systematic ~53% sell / ~47%
+buy mix that, in a sustained bearish regime, manifests as the
+all-SHORT cascade seen in the live incident. Three layers caused
+the bias; two are fixed here.
+
+- **Ranker direction logic** (`src/signals/pair_ranker.py`): the
+  structure/pullback asymmetric gates (0.1 / 0.15) were effectively
+  unreachable in production data distributions, so the
+  momentum-only fallback at ±0.2 was the only path that ever
+  produced a direction. Since `momentum_score` observed in
+  `[-0.93, +0.33]` (mean -0.22 in the last 30d) is dominantly
+  negative, the fallback biases to sell. Replaced with a
+  **2-of-3 component vote** across structure, pullback, and
+  momentum with explicit gates (0.10 / 0.15 / 0.20). Direction
+  is `None` unless at least 2 of 3 components agree.
+
+- **Override path** (`src/orchestrator/trading_loop.py:702-710`
+  and mirrored in `src/backtest/strategy.py:204-205`): when the
+  decision engine returns NO_TRADE but the ranker is actionable
+  with a direction, the bot forces a trade without consulting
+  the regime. The fix adds a guard:
+  - Confluence must be ≥ **0.50** (was 0.35 — the override was
+    firing on marginal signals).
+  - Direction must be **regime-compatible**: bullish regime
+    rejects sells, bearish regime rejects buys, dangerous
+    regimes (LIQUIDITY_CRISIS, MARKET_DISTORTION,
+    CHOPPY_CONTRACTING_VOL) reject all new entries. Uses
+    `RegimeAnalysis.is_bullish()` / `is_bearish()` /
+    `is_dangerous()` for the comparison.
+
+- (Open, not in this release) **Position-replace scaling bypass**:
+  ATOM scaled to 19.5% of equity across cycles because the
+  per-position cap clamps the *delta* per trade, not the
+  *aggregate* per cycle. Needs a per-cycle aggregate cap. Will
+  be fixed in v0.2.1.
+
+**Calibration:** sweep at threshold 0.10 / 0.15 / 0.20 / 0.25 /
+0.30 / 0.35 with SL/TP combinations and 3 / 5 / 8 symbol
+universes is running; output lands at
+`reports/calibration/sensitivity_matrix.md`. A second sweep
+will be run after the strategy fix lands to compare direction
+mix and per-strategy metrics against this baseline.
+
 ### Added — 2026-06-02 (Phase 2: Backtest harness)
 
 Production-grade backtest harness that replays historical Hyperliquid

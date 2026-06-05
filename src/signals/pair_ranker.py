@@ -83,6 +83,18 @@ class PairRanker:
     WEIGHT_MOMENTUM: float = 0.25
     WEIGHT_VOLUME: float = 0.20
 
+    # Direction-vote gates (added 2026-06-06 v0.2.0). The previous
+    # structure/pullback gates (0.1/0.15) plus momentum-only fallback
+    # at ±0.2 produced a systematically biased direction in bearish
+    # regimes: structure/pullback rarely agreed, so the momentum
+    # fallback was the only path that ever set direction, and
+    # momentum_score was observably biased negative
+    # ([-0.93, +0.33], mean -0.22 in the 30d calibration window).
+    # See CHANGELOG.md "v0.2.0 — strategy direction bias".
+    STRUCTURE_GATE: float = 0.10
+    PULLBACK_GATE: float = 0.15
+    MOMENTUM_GATE: float = 0.20
+
     def __init__(
         self,
         max_pairs: int = 5,
@@ -223,25 +235,12 @@ class PairRanker:
             vol_normalized * self.WEIGHT_VOLUME
         )
 
-        # Determine direction from scores.
-        # Gate values calibrated 2026-06-02 against live scanner data:
-        #   - structure_score observed in [-0.12, +0.28] (mean +0.07)
-        #   - pullback_score  observed in [-0.23, +0.30] (mean +0.03)
-        #   - momentum_score  observed in [-0.93, +0.33] (mean -0.22) — dominant signal
-        # Original gates (0.3/0.4/0.5) were unreachable for ~100% of pairs, so
-        # direction was always None and no trades ever fired. Lowered to match
-        # the actual data distribution. The confluence_score threshold (0.35)
-        # remains the final quality gate.
-        if pair.structure_score > 0.1 and pair.pullback_score > 0.15:
-            pair.direction = "buy"
-        elif pair.structure_score < -0.1 and pair.pullback_score < -0.15:
-            pair.direction = "sell"
-        elif abs(pair.momentum_score) > 0.2:
-            # Momentum is the dominant signal in current market regime —
-            # use it to stamp direction when structure/pullback don't agree.
-            pair.direction = "buy" if pair.momentum_score > 0 else "sell"
-        else:
-            pair.direction = None
+        # Determine direction from scores (v0.2.0 — 2-of-3 component vote).
+        # See _direction_from_votes for the rules; extracted so the
+        # vote logic is unit-testable in isolation.
+        pair.direction = self._direction_from_votes(
+            pair.structure_score, pair.pullback_score, pair.momentum_score
+        )
 
         pair.confidence = pair.confluence_score
 
@@ -492,6 +491,55 @@ class PairRanker:
 
         vol_ratio = recent_vol / prior_vol
         return float(np.clip(vol_ratio, 0.0, 3.0))  # Cap at 3x to avoid extreme outliers
+
+    @staticmethod
+    def _direction_from_votes(
+        structure_score: float,
+        pullback_score: float,
+        momentum_score: float,
+    ) -> str | None:
+        """Return the direction implied by a 2-of-3 component vote (v0.2.0).
+
+        Each component casts a vote if its signed score crosses the
+        gate in the same direction. The overall direction is set only
+        when at least 2 of 3 components agree. This prevents the
+        v0.1.0 failure mode where structure/pullback rarely agreed
+        (their gates were effectively unreachable in production data)
+        and the momentum-only fallback at ±0.2 silently biased
+        direction toward whichever sign momentum happened to favor
+        (mean -0.22 in the recent calibration window — i.e. sell).
+
+        Volume does NOT vote on direction — it is confirmation only.
+        Volume's job is to upweight the confluence score; whether
+        the move is up or down is for structure/pullback/momentum
+        to decide.
+
+        Returns:
+            "buy" if at least 2 components vote buy,
+            "sell" if at least 2 components vote sell,
+            None otherwise (0 votes, 1 vote, or split 1/1/1).
+        """
+        votes: list[str] = []
+        if structure_score > PairRanker.STRUCTURE_GATE:
+            votes.append("buy")
+        elif structure_score < -PairRanker.STRUCTURE_GATE:
+            votes.append("sell")
+
+        if pullback_score > PairRanker.PULLBACK_GATE:
+            votes.append("buy")
+        elif pullback_score < -PairRanker.PULLBACK_GATE:
+            votes.append("sell")
+
+        if momentum_score > PairRanker.MOMENTUM_GATE:
+            votes.append("buy")
+        elif momentum_score < -PairRanker.MOMENTUM_GATE:
+            votes.append("sell")
+
+        if votes.count("buy") >= 2:
+            return "buy"
+        if votes.count("sell") >= 2:
+            return "sell"
+        return None
 
     @staticmethod
     def normalize_volume_scores(pairs: list[RankedPair]) -> None:

@@ -66,6 +66,61 @@ logger = get_logger(__name__)
 DEFAULT_SCAN_TFS: list[str] = ["1m", "5m", "15m", "1h", "4h"]
 
 
+# Minimum confluence required to FORCE a trade through the override path
+# (ranker says actionable but decision engine says NO_TRADE). The base
+# `min_confluence_score` from the scanner is the soft gate for normal
+# trade entries (0.35 in dev.yaml); the override path requires a stricter
+# bar because it bypasses the decision engine's regime/confirmations
+# checks. v0.2.0 (2026-06-06): introduced after the 2026-06-05 01:33
+# incident showed the override was firing on marginal signals in a
+# bearish regime.
+OVERRIDE_MIN_CONFLUENCE: float = 0.50
+
+
+def direction_matches_regime(
+    direction: str | None,
+    regime_analysis: RegimeAnalysis | None,
+) -> tuple[bool, str]:
+    """Decide whether a ranker-supplied direction should be allowed
+    to override a NO_TRADE from the decision engine (v0.2.0).
+
+    Returns (allowed, reason). `reason` is a short tag suitable
+    for the audit log; callers log it when allowed=False so the
+    operator can see WHY the override was suppressed.
+
+    Rules:
+    - direction is None → allowed (no direction is not a
+      contradiction; just a missing signal). The override path
+      filters out direction=None upstream, but this is defensive.
+    - regime_analysis is None → allowed (cold start; we have
+      no regime to disagree with).
+    - Dangerous regimes (LIQUIDITY_CRISIS, MARKET_DISTORTION,
+      CHOPPY_CONTRACTING_VOL) → disallowed regardless of direction.
+      No new entries in crisis states.
+    - Bullish regime + ranker says "sell" → disallowed. The market
+      is trending up; going short is fighting the tape.
+    - Bearish regime + ranker says "buy" → disallowed.
+    - Otherwise → allowed.
+
+    Note: bullish/bearish is defined as
+    `STRONG_TREND_{STABLE,EXPANDING}_VOL` AND `ema_fast` aligned
+    with the direction. This is stricter than just "trending" and
+    avoids a ranging market being mis-classified.
+
+    Module-level (not a method) so the backtest can reuse the same
+    policy without depending on the orchestrator.
+    """
+    if direction is None or regime_analysis is None:
+        return True, "no_direction_or_no_regime"
+    if regime_analysis.is_dangerous():
+        return False, f"dangerous_regime={regime_analysis.regime.value}"
+    if regime_analysis.is_bullish() and direction == "sell":
+        return False, f"bullish_regime_sell_ranker={regime_analysis.regime.value}"
+    if regime_analysis.is_bearish() and direction == "buy":
+        return False, f"bearish_regime_buy_ranker={regime_analysis.regime.value}"
+    return True, "compatible"
+
+
 class TradingOrchestrator:
     """Main orchestration loop — connects all subsystems and runs evaluation cycles."""
 
@@ -694,20 +749,55 @@ class TradingOrchestrator:
         # with confluence=0.05 was "actionable" and would get a forced trade.
         # The audit log claimed the threshold was 0.35, but the actual gate
         # was zero — silent mismatch. Now both must hold.
+        #
+        # v0.2.0 fix (2026-06-06): the override path bypasses the
+        # decision engine, so it must itself consult the regime.
+        # Two layers added:
+        #   1. Stricter confluence floor (OVERRIDE_MIN_CONFLUENCE = 0.50)
+        #      because the override is forcing past a NO_TRADE — only the
+        #      highest-quality signals should win that fight.
+        #   2. Regime-direction compatibility check: bullish regime
+        #      rejects sells, bearish regime rejects buys, dangerous
+        #      regimes reject all new entries. This was the missing
+        #      piece that let the 2026-06-05 01:33 incident open 14
+        #      SHORTs in 1.5h through a bearish regime without any
+        #      veto.
         actionable = (
             ranked_pair.is_actionable
             and ranked_pair.direction is not None
-            and ranked_pair.confluence_score >= self._min_confluence
+            and ranked_pair.confluence_score >= OVERRIDE_MIN_CONFLUENCE
         )
         if actionable and decision.action == "NO_TRADE":
-            # Pair ranker has a strong signal — force a trade decision
-            # Also set size so the execution gate (decision.size > 0) passes
-            decision.action = ranked_pair.direction.upper() if ranked_pair.direction else "BUY"
-            decision.confidence = ranked_pair.confidence
-            decision.entry = ranked_pair.metadata.get("current_price") or (primary_tf[-1].close if primary_tf else None)
-            decision.size = max(ranked_pair.confluence_score * 0.2, 0.05)  # at least 5% position
-            logger.info("Forcing decision from pair ranker", symbol=symbol, action=decision.action,
-                       confluence=round(ranked_pair.confluence_score, 3), size=round(decision.size, 4))
+            # Regime guard (v0.2.0). direction_matches_regime returns
+            # (allowed, reason); when allowed is False we log the
+            # suppress reason and skip the override.
+            regime_analysis = self._last_regime_analysis.get(symbol)
+            allowed, reason = direction_matches_regime(
+                ranked_pair.direction, regime_analysis
+            )
+            if not allowed:
+                logger.info(
+                    "Override suppressed by regime",
+                    symbol=symbol,
+                    direction=ranked_pair.direction,
+                    confluence=round(ranked_pair.confluence_score, 3),
+                    reason=reason,
+                )
+            else:
+                # Pair ranker has a strong signal AND regime allows it —
+                # force a trade decision. Also set size so the
+                # execution gate (decision.size > 0) passes.
+                decision.action = ranked_pair.direction.upper() if ranked_pair.direction else "BUY"
+                decision.confidence = ranked_pair.confidence
+                decision.entry = ranked_pair.metadata.get("current_price") or (primary_tf[-1].close if primary_tf else None)
+                decision.size = max(ranked_pair.confluence_score * 0.2, 0.05)  # at least 5% position
+                logger.info(
+                    "Forcing decision from pair ranker",
+                    symbol=symbol,
+                    action=decision.action,
+                    confluence=round(ranked_pair.confluence_score, 3),
+                    size=round(decision.size, 4),
+                )
 
         if decision.action in ("BUY", "SELL") and decision.size > 0:
             await self._execute_decision(decision, primary_tf)

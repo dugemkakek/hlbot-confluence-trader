@@ -279,34 +279,49 @@ class TestBug5SizePctSemantics:
 
 
 class TestBug6ActionableThreshold:
-    """_evaluate_ranked_pair must require confluence >= min_confluence_score."""
+    """_evaluate_ranked_pair must require confluence >= some non-zero
+    threshold on the override path.
+
+    v0.1.0 fixed Bug #6 by gating the override on
+    `self._min_confluence` (the scanner's soft floor, default 0.35).
+    v0.2.0 tightens this to `OVERRIDE_MIN_CONFLUENCE` (a module-level
+    constant, default 0.50) because the override path bypasses the
+    decision engine and needs a higher-quality bar. Either reference
+    is fine — what matters is that the gate exists at all, so the
+    original Bug #6 (zero threshold → forced trades on noise) does
+    not regress.
+    """
 
     def test_evaluate_ranked_pair_enforces_threshold(self):
-        """Static check: the actionable gate must include the threshold."""
+        """Static check: the actionable gate must include *some*
+        non-zero confluence threshold."""
         src = _src(TradingOrchestrator._evaluate_ranked_pair)
-        assert "self._min_confluence" in src, (
-            "_evaluate_ranked_pair does not consult self._min_confluence"
-        )
-        # Find the actionable line and verify threshold is part of it.
+        # Either the v0.1.0 self._min_confluence OR the v0.2.0
+        # OVERRIDE_MIN_CONFLUENCE constant — both are valid gates
+        # on the override path. The original bug was having NO gate.
+        assert (
+            "self._min_confluence" in src or "OVERRIDE_MIN_CONFLUENCE" in src
+        ), "_evaluate_ranked_pair has no confluence threshold on the override path"
+        # Find the actionable line and verify a threshold is part of it.
         tree = ast.parse(src)
         found_threshold_compare = False
         for node in ast.walk(tree):
             if isinstance(node, ast.Compare):
                 # Look for a Compare with `confluence_score` on the left
-                # and self._min_confluence as one of the comparators.
+                # and either self._min_confluence or OVERRIDE_MIN_CONFLUENCE
+                # on the right.
                 left = node.left
                 if (
                     isinstance(left, ast.Attribute)
                     and left.attr == "confluence_score"
                 ):
                     for comp in node.comparators:
-                        if (
-                            isinstance(comp, ast.Attribute)
-                            and comp.attr == "_min_confluence"
-                        ):
+                        if isinstance(comp, ast.Attribute) and comp.attr == "_min_confluence":
+                            found_threshold_compare = True
+                        elif isinstance(comp, ast.Name) and comp.id == "OVERRIDE_MIN_CONFLUENCE":
                             found_threshold_compare = True
         assert found_threshold_compare, (
-            "No `confluence_score >= self._min_confluence` comparison found"
+            "No `confluence_score >= <threshold>` comparison found"
         )
 
 
