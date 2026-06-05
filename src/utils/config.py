@@ -157,6 +157,18 @@ class LoggingConfig(BaseModel):
     output: str = "stdout"
 
 
+class NarrativeConfig(BaseModel):
+    """Human-readable stdout logging for live operation.
+
+    2026-06-05: adds plain-English cycle summaries, decision
+    rationale, fill/close events, regime shifts, and drawdown
+    warnings. Designed for human operators watching the bot in
+    a terminal — not for production log aggregation.
+    """
+
+    enabled: bool = True
+
+
 class ScannerConfig(BaseModel):
     """Dynamic pair scanner configuration."""
 
@@ -193,6 +205,7 @@ class AppConfig(BaseModel):
     api: APIConfig = Field(default_factory=APIConfig)
     orchestrator: OrchestratorConfig = Field(default_factory=OrchestratorConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
+    narrative: NarrativeConfig = Field(default_factory=NarrativeConfig)
     scanner: ScannerConfig = Field(default_factory=ScannerConfig)
     audit: AuditConfig = Field(default_factory=AuditConfig)
     exchange: ExchangeConfig = Field(default_factory=ExchangeConfig)

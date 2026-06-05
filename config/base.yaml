@@ -105,6 +105,14 @@ audit:
   db_path: "data/audit.db"
   retention_days: 90          # rows older than this can be pruned via prune_old_entries()
 
+# ── Narrative (human-readable stdout logging) ────────────────────
+# 2026-06-05: adds a plain-English log stream to stdout so an
+# operator watching the bot in a terminal can see cycle summaries,
+# decisions, fills, and closes without parsing JSON. Disabled in
+# CI/test runs by default.
+narrative:
+  enabled: true
+
 logging:
   level: "DEBUG"
   format: "json"

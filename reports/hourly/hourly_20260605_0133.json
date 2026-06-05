@@ -1,0 +1,376 @@
+{
+  "captured_at": "2026-06-05T01:33:11.482413+00:00",
+  "health": {
+    "status": "ok",
+    "pid": 15836
+  },
+  "current": {
+    "portfolio": {
+      "total_equity": 735.19,
+      "cash_balance": 357.92,
+      "unrealized_pnl": -1.35,
+      "realized_pnl": 0.14,
+      "total_pnl": -1.21,
+      "margin_used": 0.0,
+      "exposure": 378.62,
+      "exposure_pct": 0.515,
+      "positions": [
+        {
+          "symbol": "COMP",
+          "side": "SHORT",
+          "size": 2.8523750909919667,
+          "entry_price": 16.83977328619854,
+          "current_price": 16.915,
+          "unrealized_pnl": -0.2145748046244647,
+          "unrealized_pnl_pct": -0.4467204666176442,
+          "exposure": 48.247924664129116,
+          "created_at": "2026-06-04T23:19:45.834139Z"
+        },
+        {
+          "symbol": "ETH",
+          "side": "SHORT",
+          "size": 0.012715369633115104,
+          "entry_price": 1765.8920252273504,
+          "current_price": 1759.775,
+          "unrealized_pnl": 0.07778023682084861,
+          "unrealized_pnl_pct": 0.3463985985532003,
+          "exposure": 22.376189596115132,
+          "created_at": "2026-06-04T23:19:47.202361Z"
+        },
+        {
+          "symbol": "ACE",
+          "side": "SHORT",
+          "size": 328.63114130742935,
+          "entry_price": 0.09745727006877214,
+          "current_price": 0.09795000000000001,
+          "unrealized_pnl": -0.16192639965574607,
+          "unrealized_pnl_pct": -0.5055856078055212,
+          "exposure": 32.18942029106271,
+          "created_at": "2026-06-04T23:21:00.603042Z"
+        },
+        {
+          "symbol": "AVAX",
+          "side": "SHORT",
+          "size": 0.5694076255708711,
+          "entry_price": 7.630678935103178,
+          "current_price": 7.667999999999999,
+          "unrealized_pnl": -0.021250898946675593,
+          "unrealized_pnl_pct": -0.4890923234253074,
+          "exposure": 4.366217672877439,
+          "created_at": "2026-06-04T23:21:01.230646Z"
+        },
+        {
+          "symbol": "APT",
+          "side": "SHORT",
+          "size": 39.03084563326554,
+          "entry_price": 0.7531361096348291,
+          "current_price": 0.7503500000000001,
+          "unrealized_pnl": 0.10874421507436684,
+          "unrealized_pnl_pct": 0.3699344114810737,
+          "exposure": 29.286795020920803,
+          "created_at": "2026-06-04T23:24:50.025618Z"
+        },
+        {
+          "symbol": "TAO",
+          "side": "SHORT",
+          "size": 0.13872968669626493,
+          "entry_price": 210.60342781119903,
+          "current_price": 212.3,
+          "unrealized_pnl": -0.2353649282099571,
+          "unrealized_pnl_pct": -0.8055767213446885,
+          "exposure": 29.452312485617046,
+          "created_at": "2026-06-04T23:26:43.612195Z"
+        },
+        {
+          "symbol": "BTC",
+          "side": "SHORT",
+          "size": 9.189271324205371e-05,
+          "entry_price": 63437.79908782134,
+          "current_price": 63461.149999999994,
+          "unrealized_pnl": -0.002145778676773575,
+          "unrealized_pnl_pct": -0.03680914614696717,
+          "exposure": 5.831617258960956,
+          "created_at": "2026-06-04T23:26:44.926945Z"
+        },
+        {
+          "symbol": "AR",
+          "side": "SHORT",
+          "size": 10.445266788926734,
+          "entry_price": 2.3138423723053774,
+          "current_price": 2.34145,
+          "unrealized_pnl": -0.288369036679696,
+          "unrealized_pnl_pct": -1.193150753269162,
+          "exposure": 24.4570699229325,
+          "created_at": "2026-06-05T00:01:29.525988Z"
+        },
+        {
+          "symbol": "EIGEN",
+          "side": "SHORT",
+          "size": 148.00911880409134,
+          "entry_price": 0.18097765437628363,
+          "current_price": 0.18175000000000002,
+          "unrealized_pnl": -0.11431419517845945,
+          "unrealized_pnl_pct": -0.4267629760028564,
+          "exposure": 26.900657342643605,
+          "created_at": "2026-06-05T00:02:03.149040Z"
+        },
+        {
+          "symbol": "ATOM",
+          "side": "SHORT",
+          "size": 18.8753408291228,
+          "entry_price": 1.8019857820849885,
+          "current_price": 1.7985,
+          "unrealized_pnl": 0.0657953249102084,
+          "unrealized_pnl_pct": 0.19344115362304817,
+          "exposure": 33.94730048117735,
+          "created_at": "2026-06-05T00:04:41.455525Z"
+        },
+        {
+          "symbol": "AAVE",
+          "side": "SHORT",
+          "size": 0.3359399537650959,
+          "entry_price": 71.12993815922881,
+          "current_price": 71.01,
+          "unrealized_pnl": 0.040292019665996846,
+          "unrealized_pnl_pct": 0.16861839379126137,
+          "exposure": 23.85509611685946,
+          "created_at": "2026-06-05T00:13:58.764925Z"
+        },
+        {
+          "symbol": "BNB",
+          "side": "SHORT",
+          "size": 0.05310709267736163,
+          "entry_price": 601.9997919038651,
+          "current_price": 602.0,
+          "unrealized_pnl": -1.105138072107563e-05,
+          "unrealized_pnl_pct": -3.4567476215514826e-05,
+          "exposure": 31.9704697917717,
+          "created_at": "2026-06-05T01:00:08.561686Z"
+        },
+        {
+          "symbol": "DASH",
+          "side": "SHORT",
+          "size": 0.9089242470647483,
+          "entry_price": 33.56995199279246,
+          "current_price": 34.175,
+          "unrealized_pnl": -0.549942804389136,
+          "unrealized_pnl_pct": -1.8023499328728292,
+          "exposure": 31.06248614343777,
+          "created_at": "2026-06-05T01:01:31.320515Z"
+        },
+        {
+          "symbol": "XMR",
+          "side": "LONG",
+          "size": 0.09839425557131039,
+          "entry_price": 353.0501661163374,
+          "current_price": 352.445,
+          "unrealized_pnl": -0.059544869513998164,
+          "unrealized_pnl_pct": -0.17141080062202027,
+          "exposure": 34.67856340483049,
+          "created_at": "2026-06-05T01:10:00.250067Z"
+        }
+      ]
+    },
+    "positions": [
+      {
+        "symbol": "COMP",
+        "side": "SHORT",
+        "size": 2.8523750909919667,
+        "entry": 16.83977328619854,
+        "current": 16.915,
+        "uPnL": -0.2145748046244647,
+        "uPnL_pct": -0.4467204666176442,
+        "exposure": 48.247924664129116,
+        "opened_at": "2026-06-04T23:19:45.834139Z"
+      },
+      {
+        "symbol": "ETH",
+        "side": "SHORT",
+        "size": 0.012715369633115104,
+        "entry": 1765.8920252273504,
+        "current": 1759.775,
+        "uPnL": 0.07778023682084861,
+        "uPnL_pct": 0.3463985985532003,
+        "exposure": 22.376189596115132,
+        "opened_at": "2026-06-04T23:19:47.202361Z"
+      },
+      {
+        "symbol": "ACE",
+        "side": "SHORT",
+        "size": 328.63114130742935,
+        "entry": 0.09745727006877214,
+        "current": 0.09795000000000001,
+        "uPnL": -0.16192639965574607,
+        "uPnL_pct": -0.5055856078055212,
+        "exposure": 32.18942029106271,
+        "opened_at": "2026-06-04T23:21:00.603042Z"
+      },
+      {
+        "symbol": "AVAX",
+        "side": "SHORT",
+        "size": 0.5694076255708711,
+        "entry": 7.630678935103178,
+        "current": 7.667999999999999,
+        "uPnL": -0.021250898946675593,
+        "uPnL_pct": -0.4890923234253074,
+        "exposure": 4.366217672877439,
+        "opened_at": "2026-06-04T23:21:01.230646Z"
+      },
+      {
+        "symbol": "APT",
+        "side": "SHORT",
+        "size": 39.03084563326554,
+        "entry": 0.7531361096348291,
+        "current": 0.7503500000000001,
+        "uPnL": 0.10874421507436684,
+        "uPnL_pct": 0.3699344114810737,
+        "exposure": 29.286795020920803,
+        "opened_at": "2026-06-04T23:24:50.025618Z"
+      },
+      {
+        "symbol": "TAO",
+        "side": "SHORT",
+        "size": 0.13872968669626493,
+        "entry": 210.60342781119903,
+        "current": 212.3,
+        "uPnL": -0.2353649282099571,
+        "uPnL_pct": -0.8055767213446885,
+        "exposure": 29.452312485617046,
+        "opened_at": "2026-06-04T23:26:43.612195Z"
+      },
+      {
+        "symbol": "BTC",
+        "side": "SHORT",
+        "size": 9.189271324205371e-05,
+        "entry": 63437.79908782134,
+        "current": 63461.149999999994,
+        "uPnL": -0.002145778676773575,
+        "uPnL_pct": -0.03680914614696717,
+        "exposure": 5.831617258960956,
+        "opened_at": "2026-06-04T23:26:44.926945Z"
+      },
+      {
+        "symbol": "AR",
+        "side": "SHORT",
+        "size": 10.445266788926734,
+        "entry": 2.3138423723053774,
+        "current": 2.34145,
+        "uPnL": -0.288369036679696,
+        "uPnL_pct": -1.193150753269162,
+        "exposure": 24.4570699229325,
+        "opened_at": "2026-06-05T00:01:29.525988Z"
+      },
+      {
+        "symbol": "EIGEN",
+        "side": "SHORT",
+        "size": 148.00911880409134,
+        "entry": 0.18097765437628363,
+        "current": 0.18175000000000002,
+        "uPnL": -0.11431419517845945,
+        "uPnL_pct": -0.4267629760028564,
+        "exposure": 26.900657342643605,
+        "opened_at": "2026-06-05T00:02:03.149040Z"
+      },
+      {
+        "symbol": "ATOM",
+        "side": "SHORT",
+        "size": 18.8753408291228,
+        "entry": 1.8019857820849885,
+        "current": 1.7985,
+        "uPnL": 0.0657953249102084,
+        "uPnL_pct": 0.19344115362304817,
+        "exposure": 33.94730048117735,
+        "opened_at": "2026-06-05T00:04:41.455525Z"
+      },
+      {
+        "symbol": "AAVE",
+        "side": "SHORT",
+        "size": 0.3359399537650959,
+        "entry": 71.12993815922881,
+        "current": 71.01,
+        "uPnL": 0.040292019665996846,
+        "uPnL_pct": 0.16861839379126137,
+        "exposure": 23.85509611685946,
+        "opened_at": "2026-06-05T00:13:58.764925Z"
+      },
+      {
+        "symbol": "BNB",
+        "side": "SHORT",
+        "size": 0.05310709267736163,
+        "entry": 601.9997919038651,
+        "current": 602.0,
+        "uPnL": -1.105138072107563e-05,
+        "uPnL_pct": -3.4567476215514826e-05,
+        "exposure": 31.9704697917717,
+        "opened_at": "2026-06-05T01:00:08.561686Z"
+      },
+      {
+        "symbol": "DASH",
+        "side": "SHORT",
+        "size": 0.9089242470647483,
+        "entry": 33.56995199279246,
+        "current": 34.175,
+        "uPnL": -0.549942804389136,
+        "uPnL_pct": -1.8023499328728292,
+        "exposure": 31.06248614343777,
+        "opened_at": "2026-06-05T01:01:31.320515Z"
+      },
+      {
+        "symbol": "XMR",
+        "side": "LONG",
+        "size": 0.09839425557131039,
+        "entry": 353.0501661163374,
+        "current": 352.445,
+        "uPnL": -0.059544869513998164,
+        "uPnL_pct": -0.17141080062202027,
+        "exposure": 34.67856340483049,
+        "opened_at": "2026-06-05T01:10:00.250067Z"
+      }
+    ],
+    "signals": {
+      "total": 17473,
+      "last_captured": "2026-06-05 01:33:03",
+      "current_cycle": 1142,
+      "by_key": {
+        "AAVE:1h": 561,
+        "ACE:15m": 28,
+        "ACE:1h": 439,
+        "APT:1h": 294,
+        "AR:1h": 1173,
+        "ATOM:1h": 1959,
+        "AVAX:1h": 206,
+        "BCH:1h": 706,
+        "BNB:1h": 1174,
+        "BSV:1h": 112,
+        "BTC:1h": 2612,
+        "COMP:1h": 700,
+        "DASH:1h": 572,
+        "EIGEN:1h": 1604,
+        "ETH:1h": 1698,
+        "PAXG:1h": 642,
+        "TAO:1h": 1189,
+        "XMR:1h": 1804
+      }
+    },
+    "trades": [],
+    "regime": {
+      "regime": "STRONG_TREND_STABLE_VOL",
+      "confidence": 0.65,
+      "adx": 40.3063,
+      "volume_ratio": 0.73
+    }
+  },
+  "deltas_vs_previous": {
+    "elapsed_hours": 1.0,
+    "equity_delta": 195.96,
+    "realized_pnl_delta": 0.0,
+    "unrealized_pnl_delta": 0.6,
+    "new_signals": 505,
+    "new_trades": 0,
+    "positions_count_delta": 3,
+    "regime_change": false
+  },
+  "signal_rate_per_min": 8.42,
+  "regime_now": "STRONG_TREND_STABLE_VOL",
+  "notes": "EXPOSURE > 50% cap: 51.5%"
+}

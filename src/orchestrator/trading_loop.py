@@ -71,6 +71,20 @@ class TradingOrchestrator:
 
     def __init__(self, config: AppConfig | None = None) -> None:
         self.cfg = config or get_config()
+
+        # 2026-06-05: human-readable narrative logger. Sits
+        # alongside the JSON event stream and prints plain-
+        # English to stdout so an operator watching the bot
+        # in a terminal can see what's happening at a glance.
+        from ..utils.narrative import NarrativeLogger
+        try:
+            narrative_enabled = bool(
+                getattr(self.cfg, "narrative", None)
+                and getattr(self.cfg.narrative, "enabled", True)
+            )
+        except Exception:
+            narrative_enabled = True
+        self.narrative = NarrativeLogger(enabled=narrative_enabled)
         self.dry_run = self.cfg.orchestrator.dry_run
 
         # Components
@@ -132,6 +146,7 @@ class TradingOrchestrator:
     async def start(self) -> None:
         """Connect all components and start the evaluation loop."""
         logger.info("Starting TradingOrchestrator")
+        self.narrative.banner()
 
         self.rest = HyperliquidREST()
         await self.rest.connect()
@@ -261,6 +276,15 @@ class TradingOrchestrator:
         rough_ranked = self._rough_rank_by_liquidity(discovered_pairs)
         top_symbols = [p.symbol for p in rough_ranked[: self._rough_filter_max]]
         logger.info("Phase 2: Rough ranked top candidates", top_count=len(top_symbols), symbols=top_symbols)
+
+        # Narrative: announce the cycle with the current BTC regime
+        btc_regime = self._last_regime_analysis.get("BTC")
+        regime_str = btc_regime.regime.value if btc_regime else "UNKNOWN"
+        self.narrative.cycle_start(
+            discovered=len(discovered_pairs),
+            top=top_symbols,
+            regime=regime_str,
+        )
 
         # ── Phase 3: Fetch candles only for top 10 symbols (targeted, ~20 req) ───
         candles_by_symbol = await self._fetch_candles_for_symbols(top_symbols)
@@ -392,6 +416,11 @@ class TradingOrchestrator:
                 )
         except Exception as exc:
             logger.debug("Performance capture skipped", error=str(exc))
+
+        # Narrative: close out the cycle summary
+        n_actions = 1 if (decision == "TRADE" and top_pair) else 0
+        n_holds = 1 if (decision == "HOLD" or not top_pair) else 0
+        self.narrative.cycle_end(ms=elapsed_ms, n_actions=n_actions, n_holds=n_holds)
 
         if decision == "TRADE" and top_pair and current_price:
             # Calculate quantity from decision.size (which is a percentage 0-1)
@@ -641,6 +670,22 @@ class TradingOrchestrator:
             pullback_score=round(ranked_pair.pullback_score, 3),
         )
 
+        # Narrative: explain the decision in one line
+        # (e.g. "🟢 BUY     AR     score=0.479  momentum=0.44 volume=0.55")
+        why_parts = []
+        if ranked_pair.structure_score and abs(ranked_pair.structure_score) > 0.05:
+            why_parts.append(f"struct={ranked_pair.structure_score:+.2f}")
+        if ranked_pair.momentum_score and abs(ranked_pair.momentum_score) > 0.05:
+            why_parts.append(f"mom={ranked_pair.momentum_score:+.2f}")
+        if ranked_pair.volume_score:
+            why_parts.append(f"vol={ranked_pair.volume_score:.2f}")
+        self.narrative.decision(
+            symbol=symbol,
+            action=decision.action,
+            score=decision.confidence,
+            why=" ".join(why_parts) if why_parts else "no clear edge",
+        )
+
         # ── Execute if BUY or SELL ──────────────────────────────────────────────
         # Override decision engine when pair ranker says actionable with a clear direction
         # This ensures trades fire even if the decision engine is overly conservative
@@ -800,6 +845,22 @@ class TradingOrchestrator:
                         symbol=decision.symbol,
                         realized_pnl=round(existing.unrealized_pnl, 4),
                         fill_price=close_result.fill_price)
+            # Narrative: log the close + the flip in plain English
+            self.narrative.position_closed(
+                symbol=decision.symbol,
+                side=existing.side.value,
+                size=existing.size,
+                entry=existing.entry_price,
+                exit_=close_result.fill_price or 0.0,
+                pnl=existing.unrealized_pnl,
+                pnl_pct=existing.unrealized_pnl_pct,
+                reason="opposite-direction flip",
+            )
+            self.narrative.position_flipped(
+                symbol=decision.symbol,
+                from_side=existing.side.value,
+                to_side=new_side.value,
+            )
         elif existing and existing.side == new_side:
             # Same direction — let it through; the bot is averaging/piling in.
             # A future cap on max-position-size can clamp this (TODO B).
@@ -849,6 +910,23 @@ class TradingOrchestrator:
                 symbol=decision.symbol,
                 side=order_side.value,
                 fill_price=result.fill_price,
+            )
+            # Narrative: human-readable open line
+            try:
+                portfolio = self.executor.get_portfolio() if self.executor else None
+                equity = portfolio.total_equity if portfolio else 0.0
+                exp_pct = portfolio.exposure_pct if portfolio else 0.0
+            except Exception:
+                equity, exp_pct = 0.0, 0.0
+            regime_str = decision.regime.value if decision.regime else None
+            self.narrative.position_opened(
+                symbol=decision.symbol,
+                side=order_side.value,
+                size=decision.size,
+                fill_price=result.fill_price,
+                equity=equity,
+                exposure_pct=exp_pct,
+                regime=regime_str,
             )
             # Broadcast trade
             await WebSocketManager.broadcast({
