@@ -7,6 +7,16 @@ database:
 redis:
   host: "localhost"
 
+risk:
+  # 2026-06-05: lowered max_daily_trades 20→10 + added max_positions=4
+  # cap. The 14 SHORTs on 2026-06-05 happened because:
+  #  - per-position cap (20%) only bounded the *delta*, not the count
+  #  - max_daily_trades=20 was high enough to allow 14 trades in 1.5h
+  #  - there was no global "no more than N open positions" gate
+  # See risk_manager.check_max_positions.
+  max_daily_trades: 10
+  max_positions: 4
+
 executor:
   initial_balance: 50.0
   dry_run: true
@@ -37,11 +47,14 @@ exchange:
 scanner:
   rough_filter_max: 20
   min_sz_decimals: 1
-  # 2026-06-04: lowered from 0.35 → 0.25 (matches base.yaml).
-  # The confluence engine produces 0.10–0.40 scores; 0.35 filtered
-  # out everything except 1–2 symbols. See base.yaml for the full
-  # rationale.
-  min_confluence_score: 0.25
+  # 2026-06-05: bumped 0.25 → 0.35. The 14 SHORTs were all
+  # confluence ~0.25-0.32 — too close to the noise floor. 0.35
+  # keeps only actionable signals. The engine's audit log
+  # showed 0.10-0.40 is the production range, so 0.35 surfaces
+  # the top 2-3 pairs per cycle (was 5-8 at 0.25). Tighter
+  # than base.yaml because the all-SHORT bias is most acute
+  # on marginal signals.
+  min_confluence_score: 0.35
   min_confirmations: 2
 
 logging:

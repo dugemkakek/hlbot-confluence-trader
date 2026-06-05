@@ -116,6 +116,14 @@ class RiskConfig(BaseModel):
     take_profit_pct: float = 0.04
     max_leverage: int = 1
     max_daily_trades: int = 20
+    # 2026-06-05: hard cap on the number of simultaneously-open
+    # positions. The confluence engine can produce many actionable
+    # signals in a single cycle, and each individual trade passed
+    # the per-position + per-portfolio exposure checks — but the
+    # book kept growing until exposure crossed 50%. With max_positions,
+    # the book is bounded to 4 by default, which is enough room for
+    # the strategy to express a view but not enough to blow up.
+    max_positions: int = 4
 
 
 class EngineConfig(BaseModel):

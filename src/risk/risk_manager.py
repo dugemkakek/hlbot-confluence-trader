@@ -120,6 +120,9 @@ class RiskManager:
         self._take_profit_pct: float = r.take_profit_pct
         self._max_leverage: float = float(r.max_leverage)
         self._max_daily_trades: int = r.max_daily_trades
+        # 2026-06-05: hard cap on simultaneous open positions.
+        # Default 4 (dev.yaml uses 4 too). See risk_manager docstring.
+        self._max_positions: int = r.max_positions
 
         # ── Configurable sizing parameters ───────────────────────────────
         self._base_risk_per_trade_pct: float = 0.01  # 1% default
@@ -252,6 +255,17 @@ class RiskManager:
             await self._log_check(symbol, side, size_pct, False, reason, portfolio)
             return False, reason
 
+        # ── 6a. Max open positions (book-size cap) ──────────────────────
+        # 2026-06-05: prevents the per-position-cap bypass where 14 small
+        # SHORT positions across 14 symbols bypasses the 20% per-position
+        # cap and the 50% portfolio exposure cap. The cap on COUNT is
+        # the missing safety net. Placed after drawdown so a drawdown
+        # still takes priority over book size.
+        ok, reason = self.check_max_positions(len(positions))
+        if not ok:
+            await self._log_check(symbol, side, size_pct, False, reason, portfolio)
+            return False, reason
+
         # ── 7. Correlation / concentration ────────────────────────────────
         if positions:
             ok, reason = self.check_correlation_positions(positions, symbol)
@@ -291,6 +305,30 @@ class RiskManager:
         return (
             False,
             f"Daily trades {count} >= max {self._max_daily_trades}",
+        )
+
+    def check_max_positions(self, current_count: int) -> tuple[bool, str]:
+        """Total open positions must not exceed max_positions.
+
+        This is the global book-size cap. The per-position
+        ``max_position_pct`` and per-portfolio
+        ``max_portfolio_exposure`` only bound the dollar exposure
+        of each individual trade — they don't prevent the bot from
+        opening 14 small positions across 14 different symbols
+        until the book is unmanageable. (That is exactly what
+        happened on 2026-06-05: 14 SHORTs in 1.5h, all under the
+        20% per-position cap, total exposure 51% of equity.)
+
+        Parameters
+        ----------
+        current_count : int
+            Number of positions currently open across all symbols.
+        """
+        if current_count < self._max_positions:
+            return True, ""
+        return (
+            False,
+            f"Max open positions {current_count} >= limit {self._max_positions}",
         )
 
     def check_drawdown(
@@ -339,9 +377,18 @@ class RiskManager:
         same_cluster_size = sum(
             p.exposure for p in open_positions if cluster_of(p.symbol) == new_cluster
         )
-        # Note: exposure_pct is fraction of initial_balance. We check total notional.
+        # Note: exposure_pct is fraction of total_equity. We check total notional.
+        # 2026-06-05: denominator changed from self.initial_balance to
+        # portfolio.total_equity — same fix as the f5247e9 exposure_pct
+        # bug. With initial_balance as denominator, the cap is relative
+        # to a stale baseline and stops being meaningful as equity drifts.
         total_exposure = sum(p.exposure for p in open_positions)
-        cluster_pct = same_cluster_size / self.initial_balance if self.initial_balance > 0 else 0.0
+        portfolio = self._pf.get_portfolio()
+        cluster_pct = (
+            same_cluster_size / portfolio.total_equity
+            if portfolio.total_equity > 0
+            else 0.0
+        )
 
         if cluster_pct > 0.40:
             return (
@@ -655,6 +702,9 @@ class RiskManager:
 
     def _is_drawdown_breaker_active(self, current_equity: float) -> bool:
         """Return True if current drawdown exceeds max_drawdown_pct."""
+        # Manual kill switch takes priority
+        if getattr(self, "_manual_kill", False):
+            return True
         if self._peak_equity <= 0:
             return False
         drawdown = (self._peak_equity - current_equity) / self._peak_equity
@@ -670,9 +720,17 @@ class RiskManager:
         return active
 
     def _is_daily_loss_breaker_active(self) -> tuple[bool, float]:
-        """Return (active, daily_loss_pct) if today's loss exceeds 5%."""
+        """Return (active, daily_loss_pct) if today's loss exceeds 5%.
+
+        2026-06-05: denominator changed from self.initial_balance to
+        portfolio.total_equity. Same bug class as the f5247e9
+        exposure_pct fix — a stale baseline makes the cap
+        meaningless as equity drifts.
+        """
         threshold_pct = 0.05
-        daily_loss_pct = self._daily.pnl / self.initial_balance if self.initial_balance > 0 else 0.0
+        portfolio = self._pf.get_portfolio()
+        denom = portfolio.total_equity if portfolio.total_equity > 0 else 0.0
+        daily_loss_pct = self._daily.pnl / denom if denom > 0 else 0.0
         active = daily_loss_pct < -threshold_pct
         if active:
             logger.warning(
@@ -696,25 +754,6 @@ class RiskManager:
         """
         logger.critical("MANUAL DRAWDOWN MODE TRIGGER — all new positions suspended")
         self._manual_kill = True
-
-    def _is_drawdown_breaker_active(self, current_equity: float) -> bool:
-        """Return True if current drawdown exceeds max_drawdown_pct."""
-        # Manual kill switch takes priority
-        if getattr(self, "_manual_kill", False):
-            return True
-        if self._peak_equity <= 0:
-            return False
-        drawdown = (self._peak_equity - current_equity) / self._peak_equity
-        active = drawdown > self._max_drawdown_pct
-        if active:
-            logger.warning(
-                "DRAWDOWN CIRCUIT BREAKER TRIGGERED",
-                drawdown=f"{drawdown:.2%}",
-                max=f"{self._max_drawdown_pct:.2%}",
-                peak_equity=self._peak_equity,
-                current_equity=current_equity,
-            )
-        return active
 
     def trigger_daily_loss_mode(self) -> None:
         """Manually trigger daily loss circuit breaker."""
@@ -807,7 +846,10 @@ class RiskManager:
             }
         """
         portfolio = self._pf.get_portfolio()
-        daily_pnl_pct = self._daily.pnl / self.initial_balance if self.initial_balance > 0 else 0.0
+        # 2026-06-05: denominator changed from initial_balance to
+        # total_equity (same bug class as the f5247e9 exposure_pct fix).
+        denom = portfolio.total_equity if portfolio.total_equity > 0 else 0.0
+        daily_pnl_pct = self._daily.pnl / denom if denom > 0 else 0.0
         drawdown = (
             (self._peak_equity - portfolio.total_equity) / self._peak_equity
             if self._peak_equity > 0

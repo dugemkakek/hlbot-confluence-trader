@@ -116,8 +116,10 @@ class TestDailyTradeCheck:
 
     def test_under_cap_with_overrides(self, risk_manager):
         rm, _ = risk_manager
-        rm._daily = DailyStats(trades=10)
-        ok, _ = rm.check_daily_trades(10)
+        # Use a count safely below whatever max_daily_trades is
+        # configured (dev.yaml sets it to 10, base.yaml to 20).
+        rm._daily = DailyStats(trades=5)
+        ok, _ = rm.check_daily_trades(5)
         assert ok
 
 
@@ -682,6 +684,111 @@ class TestExposurePctDenominator:
             )
             await ex.disconnect()
         asyncio.run(run())
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Regression: max open positions cap (2026-06-05)
+# ─────────────────────────────────────────────────────────────────────
+# On 2026-06-05 the bot opened 14 SHORT positions in 1.5h on 14
+# different symbols, each well under the 20% per-position cap, with
+# no global "no more than N open positions" gate. Net result: 51%
+# exposure on $735 equity with positions already at -1% to -2% uPnL
+# and the book still growing.
+#
+# The fix: RiskManager.check_max_positions() rejects any new
+# position when the count is already at the cap. The cap is set in
+# cfg.risk.max_positions (default 4) and overrides cleanly per env.
+# ─────────────────────────────────────────────────────────────────────
+
+
+class TestMaxPositionsCap:
+    def test_max_positions_blocks_5th_position(self, risk_manager):
+        """4 SHORTs already open → 5th SHORT must be blocked."""
+        rm, executor = risk_manager
+        rm._max_positions = 4  # matches dev.yaml
+        rm._peak_equity = 100.0
+
+        from src.data.models import Position, OrderSide
+        for sym in ["BTC", "ETH", "SOL", "AVAX"]:
+            executor._positions[sym] = Position(
+                symbol=sym, side=OrderSide.SHORT, size=0.1,
+                entry_price=100.0, current_price=100.0,
+                unrealized_pnl=0.0, unrealized_pnl_pct=0.0,
+                exposure=10.0,
+                created_at=datetime.now(timezone.utc),
+            )
+
+        async def run():
+            ok, reason = await rm.pre_trade_check(
+                symbol="AR", side=OrderSide.SHORT, size_pct=0.05,
+            )
+            assert not ok, "5th position should be blocked by max_positions"
+            assert "max" in reason.lower() and "position" in reason.lower(), (
+                f"reason should mention max positions, got: {reason!r}"
+            )
+        asyncio.run(run())
+
+    def test_max_positions_allows_4th_position(self, risk_manager):
+        """3 SHORTs open → 4th SHORT must still be allowed."""
+        rm, executor = risk_manager
+        rm._max_positions = 4
+
+        from src.data.models import Position, OrderSide
+        for sym in ["BTC", "ETH", "SOL"]:
+            executor._positions[sym] = Position(
+                symbol=sym, side=OrderSide.SHORT, size=0.1,
+                entry_price=100.0, current_price=100.0,
+                unrealized_pnl=0.0, unrealized_pnl_pct=0.0,
+                exposure=10.0,
+                created_at=datetime.now(timezone.utc),
+            )
+        # 3 SHORTs credit $10 cash each, so cash goes from 50 → 80.
+        # Equity = 80 cash + 30 exposure + 0 pnl = 110.
+        # Set peak = current to neutralise the drawdown breaker —
+        # this test is about max_positions, not drawdown.
+        executor._cash = 80.0
+        portfolio = executor.get_portfolio()
+        rm._peak_equity = portfolio.total_equity
+
+        async def run():
+            ok, reason = await rm.pre_trade_check(
+                symbol="AR", side=OrderSide.SHORT, size_pct=0.05,
+            )
+            assert ok, f"4th position should be allowed, got: {reason!r}"
+        asyncio.run(run())
+
+    def test_check_max_positions_unit(self, risk_manager):
+        """Direct unit test on the check method."""
+        rm, _ = risk_manager
+        rm._max_positions = 4
+        ok, _ = rm.check_max_positions(3)
+        assert ok
+        ok, reason = rm.check_max_positions(4)
+        assert not ok
+        assert "4" in reason and "limit" in reason.lower()
+
+
+class TestDailyLossBreakerUsesCurrentEquity:
+    """Regression: same bug class as the f5247e9 exposure_pct fix.
+
+    The daily-loss breaker used self.initial_balance as denominator,
+    so the trigger was relative to a stale baseline. As equity drifted
+    (especially downward), the breaker either fired too late or
+    relative to the wrong threshold.
+    """
+
+    def test_daily_loss_uses_current_equity(self, risk_manager):
+        rm, executor = risk_manager
+        # Simulate: equity now 50. -$3.00 = -6% loss.
+        # At the OLD calculation (initial 100), -$3.00 = -3.0% (no trip).
+        # At the NEW calculation (current 50), -$3.00 = -6.0% (trips).
+        # Use a value strictly below the -5% threshold so the
+        # `<` comparison trips regardless of the exact threshold.
+        executor._cash = 50.0
+        rm._daily = DailyStats(pnl=-3.00)
+        active, loss_pct = rm._is_daily_loss_breaker_active()
+        assert loss_pct == pytest.approx(-0.06, abs=0.001)
+        assert active, "Daily loss breaker should trip at -6% of current equity"
 
 
 # ─────────────────────────────────────────────────────────────────────
