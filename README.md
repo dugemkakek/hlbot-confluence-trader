@@ -13,7 +13,7 @@ developer picking this up, read this first. It covers the
 project's purpose, architecture, how to run it, how to debug
 it, what the known issues are, and where the deeper docs live.
 
----
+***
 
 ## What this project is
 
@@ -40,20 +40,19 @@ sandbox. Strategy changes happen in `src/signals/` and
 `src/engine/`; the orchestration, risk, and execution layers
 are infrastructure.
 
----
+***
 
 ## Quick start (TL;DR)
 
 ```bash
-# 1. Clone / navigate
-cd D:/Programs/TradingBot/HLBot
+# 1. Clone / navigate to your project root
+cd /path/to/HLBot
 
-# 2. Start the bot (Windows)
-start.bat
-# or directly:
-C:/Users/luc18/AppData/Local/Programs/Python/Python314/python.exe \
-  -m uvicorn src.api.main:create_app --factory \
+# 2. Start the bot
+python -m uvicorn src.api.main:create_app --factory \
   --host 0.0.0.0 --port 8000
+
+# Windows users: alternatively run start.bat
 
 # 3. Health check
 curl http://localhost:8000/health
@@ -68,14 +67,15 @@ curl http://localhost:8000/api/v1/trades
 
 The bot starts in **paper mode** (`orchestrator.dry_run: true`).
 No real orders are ever placed. To stop, kill the process
-(`taskkill /F /PID <pid>` on Windows) or send SIGTERM.
+(`taskkill /F /PID <pid>` on Windows, `kill <pid>` on Unix)
+or send SIGTERM.
 
----
+***
 
 ## Project layout
 
 ```
-D:/Programs/TradingBot/HLBot/
+HLBot/
 ├── README.md                  ← this file (handoff doc)
 ├── CHANGELOG.md               ← keep-a-changelog version history
 ├── BUGS.md                    ← detailed bug investigation log
@@ -114,7 +114,7 @@ D:/Programs/TradingBot/HLBot/
 └── notebooks/                 ← Analysis scratchpads
 ```
 
----
+***
 
 ## Architecture: how a trade happens
 
@@ -159,39 +159,43 @@ The bot runs a 60-second cycle (configurable, dev mode uses
 
 The full cycle runs in `trading_loop.py:run_cycle()`.
 
----
+***
 
 ## How to run it
 
 ### Prerequisites
 
-- Python 3.11+ (this project uses 3.14 from a specific install)
+- Python 3.11+
 - No GPU/ML deps — just standard scientific Python
-- Internet access (REST + WebSocket to api.hyperliquid.xyz)
+- Internet access (REST + WebSocket to `api.hyperliquid.xyz`)
 - No Hyperliquid account needed for paper mode (uses public
   market data only)
 
 ### Setup
 
-The repo is at `D:/Programs/TradingBot/HLBot/`. No
-`requirements.txt` is checked in; the Python environment is
-managed externally. The launcher (`start.bat`) assumes
-`C:/Users/luc18/AppData/Local/Programs/Python/Python314/python.exe`.
+Navigate to your local clone of this repository. If no
+`requirements.txt` is available, recreate the environment:
 
-If you need to recreate the environment:
 ```bash
 python -m venv venv
+
+# Windows
 venv\Scripts\pip install fastapi uvicorn pydantic structlog \
+    httpx websockets aiohttp numpy pandas
+
+# Unix/macOS
+venv/bin/pip install fastapi uvicorn pydantic structlog \
     httpx websockets aiohttp numpy pandas
 ```
 
-(There's no full pinned dependency list — `pip freeze` on
-the working install will give you one.)
+> **Tip:** Run `pip freeze` on a working install to get a
+> fully pinned dependency list and commit it as
+> `requirements.txt`.
 
 ### Start the bot
 
 ```bash
-# Option A: use the launcher
+# Option A: use the launcher (Windows)
 start.bat
 
 # Option B: manual (preferred for development)
@@ -219,14 +223,18 @@ bot is still in its first-cycle warmup. Wait 60-90s.
 ### Stop the bot
 
 ```bash
-# On Windows:
+# Windows:
 taskkill /F /PID <pid>
-# where <pid> is the number from /health response
+
+# Unix/macOS:
+kill <pid>
 
 # Or Ctrl+C in the terminal where it's running
 ```
 
----
+`<pid>` is the number from the `/health` response.
+
+***
 
 ## API endpoints (the handoff surface)
 
@@ -267,7 +275,7 @@ curl "localhost:8000/api/v1/scanner/top?limit=10" | python -m json.tool
 curl "localhost:8000/api/v1/regime/ETH" | python -m json.tool
 ```
 
----
+***
 
 ## Configuration
 
@@ -321,7 +329,7 @@ To add a new config key:
 3. Override in `config/dev.yaml` if needed
 4. Access via `self.cfg.<section>.<key>`
 
----
+***
 
 ## How to debug it
 
@@ -329,8 +337,8 @@ To add a new config key:
 
 This was the original "5-day silence" bug cascade. All
 those bugs are fixed and documented in `BUGS.md` (Bugs
-#1-#11). The diagnostic recipe is in the `hlbot-kanban-debug`
-skill (Hermes-side, see References below).
+#1–#11). The diagnostic recipe is also available in the
+`hlbot-kanban-debug` skill (see References below).
 
 Quick health check:
 ```bash
@@ -368,19 +376,19 @@ that's the audit-log-lies pattern from bug #4. Check
 
 The bot writes its log to stdout. If you started it via
 `start.bat`, the log is in the console window. If you started
-it manually, it's in your terminal. If you started it in
-the background via subprocess.Popen, redirect to a file:
+it manually, it's in your terminal. To capture logs from a
+background process, redirect stdout:
 
 ```python
 import subprocess
-log = open("C:/temp/hlbot.log", "wb")
+
+log = open("hlbot.log", "wb")
 proc = subprocess.Popen(
-    [python, "-m", "uvicorn", "src.api.main:create_app", "--factory",
+    ["python", "-m", "uvicorn", "src.api.main:create_app", "--factory",
      "--host", "0.0.0.0", "--port", "8000"],
-    cwd="D:/Programs/TradingBot/HLBot",
+    cwd="/path/to/HLBot",   # update to your local path
     stdout=log, stderr=subprocess.STDOUT,
     stdin=subprocess.DEVNULL,
-    creationflags=subprocess.CREATE_NO_WINDOW,
 )
 ```
 
@@ -402,14 +410,13 @@ in `BUGS.md`. The orchestrator's size conversion and
 position-cap logic are particularly test-worthy because
 they're doing arithmetic on fractions and notionals.
 
----
+***
 
 ## Project conventions
 
 ### Commit hygiene
 
-This is a personal project (no PRs, no reviewers). Commit
-when a logical unit of work is done. Format:
+Commit when a logical unit of work is done. Format:
 
 ```
 <area>: <one-line summary>
@@ -424,7 +431,7 @@ Example: `risk: enforce max_position_pct as aggregate per-symbol cap (fixes bug 
 
 - Type hints on public function signatures
 - Inline comments only where the *why* isn't obvious
-- Doc strings on public functions
+- Docstrings on public functions
 - Use `logger.info` / `logger.warning` / `logger.error` for
   observability — these show up in the audit log and in the
   run logs
@@ -446,7 +453,7 @@ Example: `risk: enforce max_position_pct as aggregate per-symbol cap (fixes bug 
   not None) without also fixing all 4 sites that read
   `is_actionable`
 
----
+***
 
 ## Known issues (as of 2026-06-02)
 
@@ -472,8 +479,8 @@ here in priority order:
    per-day limit.** `risk.max_daily_trades: 20` is configured
    but the daily counter doesn't reset at midnight UTC — it
    resets on first trade of a new day, which means a 24-hour
-   window starting at 3am could be missed. Fix: explicit
-   midnight-UTC reset in `paper_executor.py`.
+   window starting at an off-hour could be missed. Fix:
+   explicit midnight-UTC reset in `paper_executor.py`.
 
 4. **WebSocket reconnects drop orderbook state.** When the
    Hyperliquid WS reconnects, the executor's `_orderbooks`
@@ -493,7 +500,7 @@ here in priority order:
    but cosmetically misleading. Fix: either connect to
    real Postgres/Redis or remove the readiness checks.
 
----
+***
 
 ## Where the deeper docs live
 
@@ -509,7 +516,7 @@ This README is the entry point. The deeper docs:
   documented with full root-cause analysis. The bugs are
   numbered; refer to them by number when adding new ones.
 
-### Related Hermes skills (if you're working through Hermes)
+### Related skills (if you're working through an agent framework)
 
 - **`hlbot`** — Full project context, file layout, API
   endpoints, config keys, current state. Load before any
@@ -520,19 +527,19 @@ This README is the entry point. The deeper docs:
 - **`trading-bot`** — Alias for `hlbot`, used in some
   kanban task bodies.
 
----
+***
 
-## Coordination notes (for the multi-agent setup)
+## Coordination notes (for multi-agent setups)
 
-This project has an owner (Luke) and three agents that have
-worked on it:
+This project supports a multi-agent workflow with three
+functional roles:
 
-- **Emi** — Infrastructure owner. Trading loop, executor,
+- **Infrastructure agent** — Trading loop, executor,
   risk modules, backtests, audit log, data layer.
-- **Aoi** — Trading intelligence. Regime detection,
+- **Trading intelligence agent** — Regime detection,
   decision engine tuning, market reads, calling `/execute`
   with judgment.
-- **Sana** — Reliability. Monitor script, alert system,
+- **Reliability agent** — Monitor script, alert system,
   devops.
 
 If you're an agent picking this up, your domain is whichever
@@ -544,8 +551,7 @@ the reliability agent.
 ### Handoff protocol
 
 When you finish work on this project, write a short handoff
-note in the team's coordination file (see Aya for the
-current path). Include:
+note in the team's coordination file. Include:
 - What you changed
 - What you verified (and how)
 - What's still open
@@ -554,17 +560,14 @@ current path). Include:
 The owner reviews the note, the code, and the live bot
 state before approving the handoff.
 
----
+***
 
 ## License and ownership
 
-Personal project. Not licensed for redistribution. All
-modifications go through the owner (Luke) before commit.
+Private project. Not licensed for redistribution. All
+modifications go through the project owner before commit.
 
-For questions, ask the team coordinator (Aya) or the owner
-directly. The 2026-06-02 working session with Aoi as the
-primary agent produced the cascade fix + follow-on fixes
-documented in `BUGS.md` and `CHANGELOG.md`. The next session
-should start by reading those two files and verifying the
-bot is in the "trades flowing" state described in
-`CHANGELOG.md` "Verified" section.
+The next session should start by reading `BUGS.md` and
+`CHANGELOG.md`, then verifying the bot is in the
+"trades flowing" state described in `CHANGELOG.md`'s
+"Verified" section.
