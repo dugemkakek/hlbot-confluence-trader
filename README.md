@@ -17,7 +17,7 @@ it, what the known issues are, and where the deeper docs live.
 
 ## What this project is
 
-**HLBot** is Luke's paper-trading bot for the Hyperliquid
+**HLBot** is a paper-trading bot for the Hyperliquid
 exchange. Its purpose is to validate a confluence-based
 trading strategy in real market conditions without risking
 capital. The bot:
