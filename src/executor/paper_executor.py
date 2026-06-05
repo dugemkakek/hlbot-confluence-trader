@@ -140,8 +140,8 @@ class PaperExecutor:
 
         # 2026-06-04: shared CEX poller state. Same shape as
         # the Binance one above, used for any non-Hyperliquid
-        # venue (OKX, Gate.io, etc.). Symbol mapping is venue
-        # specific and resolved per venue.
+        # venue. Symbol mapping is venue-specific and resolved
+        # per venue.
         self._cex_client: Any = None
         self._cex_subscribed: set[str] = set()
         self._cex_poll_task: asyncio.Task | None = None
@@ -173,12 +173,12 @@ class PaperExecutor:
         )
 
         # 2026-06-04: install DoH resolver for blocked crypto
-        # hostnames. The user is in Indonesia where ISPs
-        # (Telkomsel etc.) intercept DNS for exchanges like
-        # api.binance.com. The DoH patch makes
-        # socket.getaddrinfo go through Cloudflare/Google for
-        # the blocked hosts, so ccxt + aiohttp can reach them
-        # even when the system DNS is compromised.
+        # hostnames. Some networks (e.g. captive-portal ISPs)
+        # intercept DNS for exchanges like api.binance.com.
+        # The DoH patch makes socket.getaddrinfo go through
+        # Cloudflare/Google for the blocked hosts, so ccxt +
+        # aiohttp can reach them even when the system DNS is
+        # compromised.
         try:
             from ..utils.doh import install_doh_resolver
             exch = getattr(self.cfg, "exchange", None)
