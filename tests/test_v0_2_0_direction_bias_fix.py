@@ -330,8 +330,12 @@ class TestOverrideConfig:
         """OVERRIDE_MIN_CONFLUENCE must be > the dev scanner
         min_confluence_score (0.35) so the override is a
         higher-quality bar than the soft gate."""
+        # v0.2.2 (2026-06-06): lowered 0.50 -> 0.40 after the 90-day
+        # walk-forward validated it. 0.40 is still > the dev scanner
+        # min_confluence_score (0.35), so the override remains a
+        # higher-quality bar than the soft gate.
         assert OVERRIDE_MIN_CONFLUENCE > 0.35
-        assert OVERRIDE_MIN_CONFLUENCE == 0.50
+        assert OVERRIDE_MIN_CONFLUENCE == 0.40
 
     def test_trading_loop_uses_override_floor_not_scanner_floor(self):
         """AST-level check: the override path in _evaluate_ranked_pair

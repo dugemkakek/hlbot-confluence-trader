@@ -41,8 +41,8 @@ risk:
   max_position_pct: 0.20
   max_portfolio_exposure: 0.50
   max_drawdown_pct: 0.15
-  stop_loss_pct: 0.02
-  take_profit_pct: 0.04
+  stop_loss_pct: 0.03
+  take_profit_pct: 0.06
   max_leverage: 1
   max_daily_trades: 20
   # 2026-06-06 (v0.2.1): per-cycle aggregate notional cap per symbol.

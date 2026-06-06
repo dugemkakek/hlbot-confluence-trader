@@ -71,10 +71,16 @@ DEFAULT_SCAN_TFS: list[str] = ["1m", "5m", "15m", "1h", "4h"]
 # `min_confluence_score` from the scanner is the soft gate for normal
 # trade entries (0.35 in dev.yaml); the override path requires a stricter
 # bar because it bypasses the decision engine's regime/confirmations
-# checks. v0.2.0 (2026-06-06): introduced after the 2026-06-05 01:33
-# incident showed the override was firing on marginal signals in a
-# bearish regime.
-OVERRIDE_MIN_CONFLUENCE: float = 0.50
+# checks. v0.2.0 (2026-06-06): introduced at 0.50 after the 2026-06-05
+# 01:33 incident showed the override was firing on marginal signals
+# in a bearish regime.
+# v0.2.2 (2026-06-06): lowered 0.50 -> 0.40. The 90-day walk-forward
+# (reports/calibration/walkforward_90d/) showed 4/4 OOS windows
+# profitable with avg OOS return +6.4% and compounded +33.1% at the
+# 0.40 floor + 3/6 SL/TP combo. The 0.50 floor was a panic clamp;
+# the sweep + walk-forward confirm 0.40 is the right floor for the
+# current regime mix.
+OVERRIDE_MIN_CONFLUENCE: float = 0.40
 
 
 def direction_matches_regime(

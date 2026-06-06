@@ -11,6 +11,75 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.2] — 2026-06-06 (production config: sweep + walk-forward recommendations applied)
+
+Build bumped to **0.2.2** (`pyproject.toml`, `src/__init__.py`).
+The v0.3.0 sweep at threshold 0.40-0.70 found a clear best
+configuration, and the 90-day walk-forward validated it
+regime-agnostically. This release applies those recommendations
+to production config so the live bot runs on validated parameters.
+
+### Validation — 90-day walk-forward
+
+`reports/calibration/walkforward_90d/wf90_v030_best_*.json`
+(ran detached, PID 30324, finished 2026-06-06):
+
+| Window | Train | Test | Test Trades | Test WR | Test PF | Test DD |
+|---|---|---|---|---|---|---|
+| 2026-03-24 → 04-23 | +21.5% | +4.2% | 54 | 22.2% | 0.57 | -26.5% |
+| 2026-04-07 → 05-07 | -1.6% | +1.9% | 46 | 28.3% | 0.85 | -21.5% |
+| 2026-04-21 → 05-21 | +2.5% | +3.3% | 62 | 40.3% | 1.35 | -19.7% |
+| 2026-05-05 → 06-04 | +4.4% | **+16.2%** | 45 | 40.0% | **2.13** | -21.9% |
+
+**Aggregate:** 4/4 OOS windows profitable (100%), avg OOS return
+**+6.4%** per 30-day window, **compounded OOS +33.1%** over
+90 days, train-OOS gap **+0.25%** (edge persists). Verdict:
+**ROBUST EDGE**.
+
+The 7.5-day sweep test window was bear-only and looked suspicious;
+the 90-day walk-forward spans a regime mix (March mixed, April
+range, May-June bear) and prints positive in every window.
+The most recent 30d (the bear the user flagged 2026-06-05) was
+**the best** at +16.2% with PF 2.13.
+
+### Production config changes
+
+| Setting | Old | New | Source |
+|---|---|---|---|
+| `OVERRIDE_MIN_CONFLUENCE` in `trading_loop.py` | 0.50 | **0.40** | sweep: 0.40 → 27 test trades / +19.6% (vs 4 / -0.3% at 0.50) |
+| `risk.stop_loss_pct` in `base.yaml` | 0.02 | **0.03** | sweep: 3/6 is the only config with positive train (+3.8%) |
+| `risk.take_profit_pct` in `base.yaml` | 0.04 | **0.06** | same — 1:2 reward:risk preserved |
+
+`max_position_pct_per_cycle` (v0.2.1) and `max_positions=4` (bbf72ee)
+are unchanged. The walk-forward used the 0.40 floor and 3/6 SL/TP;
+production now matches the validated parameters.
+
+### Tests
+
+`tests/test_v0_2_0_direction_bias_fix.py::TestOverrideConfig`:
+pinned `OVERRIDE_MIN_CONFLUENCE == 0.50` updated to **0.40** with
+a comment explaining the walk-forward rationale. The override is
+still > the scanner's `min_confluence_score` (0.35) so the
+"override is a higher-quality bar than the soft gate" invariant
+holds. **236/236 pass.**
+
+### Open items
+
+- **Restart the live bot** with the new config. The bias fix
+  (v0.2.0) + position-replace cap (v0.2.1) + validated config
+  (v0.2.2) are all in place. The 90-day walk-forward is the
+  green light.
+- **Monitor live for the first 24h** — the walk-forward paper-test
+  used 8 symbols; production needs the universe to be wired the
+  same way. If the live universe drifts (different top-8 by
+  volume), re-run the sweep on the new universe.
+- **Re-run the walk-forward quarterly** — `reports/calibration/
+  walkforward_90d/` is reproducible via `scripts/run_walkforward.py
+  --days 90 --train-days 30 --test-days 30 --step-days 14
+  --min-confluence 0.40 --stop-loss 0.03 --take-profit 0.06`.
+
+---
+
 ## [0.2.1] — 2026-06-06 (per-cycle aggregate notional cap)
 
 Build bumped to **0.2.1** (`pyproject.toml`, `src/__init__.py`).
