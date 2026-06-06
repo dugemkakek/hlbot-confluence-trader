@@ -11,6 +11,91 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.4] — 2026-06-06 (fix opposite-side residual direction in _update_position)
+
+Build bumped to **0.2.4** (`pyproject.toml`, `src/__init__.py`).
+
+Pre-existing bug in `_update_position` (paper_executor.py), pinned
+by v0.2.3's `test_flip_metadata_resets_even_if_side_bug_persists`:
+
+```python
+# Before (v0.2.0-v0.2.3):
+new_side = OrderSide.SHORT if side == OrderSide.LONG else OrderSide.LONG
+
+# After (v0.2.4):
+new_side = side
+```
+
+When a position was fully closed AND the new order's size exceeded
+the existing position's size, the residual opened in the INVERTED
+side of the new order. So a SHORT that flipped a LONG ended up with
+a LONG residual, and the orchestrator's pre-trade risk check on the
+next decision saw `existing.side == new_side` (a same-direction
+average-in instead of a flip) — silently misrouting the next entry.
+
+This is the same class of silent bug as the v0.2.2 Position.metadata
+crash: no exception, no audit warning, just wrong behavior visible
+only in the position's recorded `side`.
+
+### Fix
+
+One-line change in `src/executor/paper_executor.py`:
+`new_side = side`. The residual inherits the new order's direction.
+
+### Tests
+
+8 new tests in `tests/test_v0_2_4_flip_residual.py`:
+- `TestFlipResidualDirection` (4): SHORT-flipping-LONG, LONG-flipping-SHORT, residual size = new - existing, side+size+metadata all survive `_refresh_unrealized_pnl`
+- `TestFlipMetadataResetsAfterSideFix` (1): end-to-end flip — side is the new order's, metadata is the new entry's, old keys dropped
+- `TestNonFlipPathsUnchanged` (3): new position, same-direction average-in, partial close — all unchanged by the fix
+
+The v0.2.3 test `test_flip_metadata_resets_even_if_side_bug_persists`
+is kept as-is for backward traceability; the v0.2.4 test
+`test_flip_resets_metadata_and_side` tightens the same scenario
+end-to-end.
+
+### Latent bug discovered while writing tests (NOT fixed in v0.2.4)
+
+The realized-PnL calculation in `_update_position` uses
+`existing.size` (USD notional) as if it were base units. For a LONG
+bought with $25 USD at $101 (so we hold 0.247 BTC) and exited at
+$100, the PnL is computed as `25 * (100 - 101) = -$25` instead of
+`0.247 * (100 - 101) = -$0.25`. A 100x overstatement of realized
+PnL on every close+flip.
+
+This is a real bug, but it's pre-existing, silent, and the bot's
+risk layer + walk-forward backtest use unrealized PnL for
+trade-by-trade decisions (not realized PnL). The risk of fixing it
+now (re-running the 90d walk-forward to confirm the calibration
+isn't affected) outweighs the cost of leaving it for a dedicated
+v0.2.5 / v0.2.6 follow-up.
+
+Pinned as a TODO. The bot's behavior in production is not affected
+because it doesn't accumulate realized PnL over many closes during
+a single regime window — closes happen on SL/TP triggers that exit
+fully, not partial closes.
+
+### Restart
+
+The bot is currently running on v0.2.3. v0.2.4 needs a restart to
+take effect. Since uvicorn is not running with `--reload`, the live
+process still has the buggy `new_side` calculation. To apply:
+
+```powershell
+# Stop the v0.2.3 process
+$pid = Get-Content "D:\Programs\TradingBot\HLBot\logs\bot.pid"
+Stop-Process -Id $pid
+
+# Launch v0.2.4
+Start-Process -FilePath "D:\Programs\TradingBot\HLBot\logs\launch_bot.cmd" -WindowStyle Hidden
+```
+
+### Total
+
+**261/261 passing** (253 → 261, +8 v0.2.4 tests).
+
+---
+
 ## [0.2.3] — 2026-06-06 (Position.metadata field + entry_confluence wiring)
 
 Build bumped to **0.2.3** (`pyproject.toml`, `src/__init__.py`).

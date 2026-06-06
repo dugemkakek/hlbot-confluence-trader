@@ -953,8 +953,14 @@ class PaperExecutor:
                 self._realized_pnl += pnl
 
                 if residual > 0:
-                    # Residual opens new position in opposite direction
-                    new_side = OrderSide.SHORT if side == OrderSide.LONG else OrderSide.LONG
+                    # Residual opens new position in opposite direction.
+                    # 2026-06-06 (v0.2.4): the residual side inherits the
+                    # NEW order's direction. The previous logic
+                    # (`new_side = OrderSide.SHORT if side == LONG else
+                    # LONG`) inverted it, so a SHORT that flipped a LONG
+                    # ended up as a LONG residual. Pre-existing bug,
+                    # surfaced while writing the v0.2.3 flip-path tests.
+                    new_side = side
                     self._positions[symbol] = Position(
                         symbol=symbol,
                         side=new_side,
