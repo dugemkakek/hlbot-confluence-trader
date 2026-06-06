@@ -11,6 +11,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.5] — 2026-06-06 (correct v0.2.4 PnL misconception: docstring + clarifying tests)
+
+Build bumped to **0.2.5** (`pyproject.toml`, `src/__init__.py`).
+
+v0.2.4's CHANGELOG noted that the realized-PnL math in
+`_update_position` was "100x off" because `existing.size` (USD
+notional) was being used as base units. **That finding was
+incorrect.** v0.2.5 corrects it.
+
+### What was actually true
+
+`place_order(size=...)` takes **base currency units** (e.g. BTC), not
+USD notional. The orchestrator computes
+`decision.size = capped_notional / decision.entry` (see
+`trading_loop._execute_decision`), where `capped_notional` is USD
+and `decision.entry` is USD-per-base. The result is base units.
+
+The pre-v0.2.5 docstring on `place_order` said "Order size in quote
+currency (USD)" — that docstring was misleading, and it led to the
+v0.2.4 misconception. The math `pnl = size * (fill - entry)` is
+correct given base-unit size: it yields USD PnL directly.
+
+**Verified against the live 2026-06-06 production run:** the AR
+fill log shows `size: 0.675` at `$1.85` = $1.25 notional. The
+position's `size` field is 0.675 (base units), and the PnL math
+yields USD PnL.
+
+### Changes
+
+1. **`src/executor/paper_executor.py`** — `place_order` docstring
+   rewritten to make base-unit size explicit, with a pointer to
+   the production path. Inline comments added to the PnL math in
+   `_update_position` referencing this clarification.
+2. **`tests/test_v0_2_5_size_semantics.py`** (new, 5 tests) — pins
+   the size semantics so a future docstring regression can't lead
+   to a "fix" that breaks the math:
+   - `TestSizeIsBaseUnits` (2): position.size equals passed size;
+     cash deduction matches base × price
+   - `TestPnlMathInUsd` (2): LONG and SHORT close PnL matches
+     `size * (fill - entry)` in USD
+   - `TestPartialClosePnl` (1): partial close PnL uses the
+     partial-close size in base units
+3. **CHANGELOG correction** — this entry supersedes the v0.2.4
+   "100x overstatement" note.
+
+### Total
+
+**266/266 passing** (261 → 266, +5 v0.2.5 tests).
+
+### Restart
+
+The bot is currently running on v0.2.4 with the same PnL math
+(production code is unchanged). Restart is optional but recommended
+so the docstring and clarifying comments are visible in the
+running process's introspection. Same `launch_bot.cmd` flow.
+
+---
+
 ## [0.2.4] — 2026-06-06 (fix opposite-side residual direction in _update_position)
 
 Build bumped to **0.2.4** (`pyproject.toml`, `src/__init__.py`).

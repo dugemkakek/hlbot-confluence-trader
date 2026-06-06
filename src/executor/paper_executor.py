@@ -647,7 +647,19 @@ class PaperExecutor:
         Args:
             symbol: Trading pair, e.g. "BTC".
             side: LONG or SHORT.
-            size: Order size in quote currency (USD).
+            size: 2026-06-06 (v0.2.5) — Order size in **base currency
+                units** (e.g. BTC for BTC/USDT), NOT quote currency
+                (USD). The orchestrator computes this as
+                `capped_notional / decision.entry` (see
+                `trading_loop._execute_decision`), where
+                `capped_notional` is USD and `decision.entry` is
+                USD-per-base. The resulting size is base units. The
+                pre-v0.2.5 docstring said "quote currency (USD)"
+                which was misleading and led to a v0.2.4 CHANGELOG
+                note claiming the PnL math was 100x off — the math
+                is in fact correct given base-unit size semantics.
+                Verified against the live 2026-06-06 production run
+                (0.675 AR @ $1.85 = $1.25 notional).
             order_type: MARKET or LIMIT.
             limit_price: Price for limit orders.
             strategy_name: Optional strategy label for the journal.
@@ -940,7 +952,16 @@ class PaperExecutor:
             )
 
         else:
-            # Opposite side — reduce or close position
+            # Opposite side — reduce or close position.
+            # 2026-06-06 (v0.2.5): size is in BASE units (e.g. BTC),
+            # not USD notional. The PnL math
+            # `size * (fill - entry)` is correct given base-unit
+            # size — it yields USD PnL directly. The v0.2.4
+            # CHANGELOG noted a 100x PnL discrepancy that turned
+            # out to be a docstring confusion in `place_order` (the
+            # docstring said "quote currency (USD)" but the
+            # orchestrator passes base units). The math was right
+            # all along.
             if size >= existing.size:
                 # Fully or partially close; residual becomes new position in opposite direction
                 residual = size - existing.size
@@ -980,7 +1001,10 @@ class PaperExecutor:
                     # Exact close — position fully removed
                     del self._positions[symbol]
             else:
-                # Partial close — reduce size of existing position
+                # Partial close — reduce size of existing position.
+                # PnL math: `size * (fill - entry)` where `size` is
+                # the partial-close size in BASE units. See v0.2.5
+                # comment in the opposite-side branch above.
                 if existing.side == OrderSide.LONG:
                     pnl = size * (fill_price - existing.entry_price)
                 else:
