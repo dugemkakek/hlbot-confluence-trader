@@ -319,6 +319,14 @@ class TradingOrchestrator:
         cycle_start = time.monotonic()
         logger.debug("Cycle start")
 
+        # v0.2.1: reset per-symbol cycle-aggregate notional. The cap in
+        # risk_manager.check_cycle_aggregate is bounded per cycle, so
+        # each new cycle starts with a clean slate. Without this reset,
+        # the aggregate would compound across cycles and the strategy
+        # would stop being able to trade any symbol it touched recently.
+        if self.risk_manager is not None:
+            self.risk_manager.reset_cycle_aggregates()
+
         # ── Phase 1: Discover candidate pairs (2 API calls, no per-pair calls) ───
         discovered_pairs = await self._discover_pairs()
         if not discovered_pairs:
@@ -1001,6 +1009,13 @@ class TradingOrchestrator:
                 side=order_side.value,
                 fill_price=result.fill_price,
             )
+            # v0.2.1: record this fill's notional into the symbol's cycle
+            # aggregate. Next decision for the same symbol within this
+            # cycle will see the running total and the per-cycle cap
+            # will fire if a close+reopen sequence is trying to stack.
+            if self.risk_manager is not None and result.fill_price and decision.size:
+                filled_notional = abs(decision.size) * result.fill_price
+                self.risk_manager.record_cycle_aggregate(decision.symbol, filled_notional)
             # Narrative: human-readable open line
             try:
                 portfolio = self.executor.get_portfolio() if self.executor else None

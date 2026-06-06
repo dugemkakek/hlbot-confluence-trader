@@ -11,6 +11,83 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.1] — 2026-06-06 (per-cycle aggregate notional cap)
+
+Build bumped to **0.2.1** (`pyproject.toml`, `src/__init__.py`).
+Closes the position-replace scaling bypass flagged as the
+remaining v0.2.0 post-mortem item.
+
+### Added
+
+- **`risk.max_position_pct_per_cycle`** in `RiskConfig`
+  (`src/utils/config.py`, `config/dev.yaml`, `config/base.yaml`).
+  Default **0.20** — equals `max_position_pct`. Bounds the SUM of
+  opened-notional for one symbol within a single orchestrator
+  cycle, regardless of replace count.
+
+- **`RiskManager.check_cycle_aggregate`** (`src/risk/risk_manager.py`).
+  New step 3a in `pre_trade_check` (after per-position cap, before
+  portfolio exposure). Returns False when
+  `_cycle_aggregate_notional[symbol] + size_pct * equity` would
+  exceed the cap.
+
+- **`RiskManager.record_cycle_aggregate(symbol, notional)`** —
+  called by the orchestrator after a successful fill, accumulates
+  per-symbol notional in the current cycle.
+
+- **`RiskManager.reset_cycle_aggregates()`** — called by the
+  orchestrator at the start of each `run_cycle()`. Per-cycle, not
+  per-day: a fresh cycle starts with a clean slate so the strategy
+  can respond to new conditions.
+
+- **Orchestrator wiring** (`src/orchestrator/trading_loop.py`):
+  - `run_cycle()` calls `reset_cycle_aggregates()` after the
+    cycle-start logger so each cycle begins at zero.
+  - After a successful `place_order` fill, the orchestrator
+    records the filled notional via
+    `risk_manager.record_cycle_aggregate(symbol, fill_size)`.
+
+### Why this fixes the bypass
+
+The per-position cap (`max_position_pct`) only bounds the **delta**
+of a single trade. Within a single cycle, the orchestrator
+evaluates each ranked pair at most once — but a **close+reopen
+sequence across cycles** can stack the same dollar exposure by
+oscillating close-then-reopen. Each reopen reads
+`existing.exposure = 0` (the close ran first), and the cap is
+silently bypassed. The per-cycle aggregate bounds the SUM, so the
+second reopen within the cycle is rejected.
+
+### Tests
+
+`tests/test_v0_2_1_position_replace_cap.py` — 15 new tests across
+4 classes:
+
+- `TestCheckCycleAggregate` (7): zero existing, under cap, at cap
+  (boundary), over cap, zero equity (defensive), zero notional,
+  per-symbol independence.
+- `TestRecordAndReset` (4): accumulation, non-positive ignored,
+  reset clears all, reset+record starts fresh.
+- `TestPreTradeCheckWiring` (2): first trade in cycle passes,
+  repeated cycles reset.
+- `TestCloseReopenBypass` (2): reproduces the ATOM 19.5% scenario
+  from the v0.2.0 release notes, verifies the second reopen is
+  blocked once cycle aggregate hits cap.
+
+Full suite: **236/236 pass** (was 221; +15 new for v0.2.1).
+
+### What's still open
+
+- v0.2.1 closes the per-symbol stacking vector. It does NOT add a
+  per-cycle aggregate cap on portfolio-wide turnover (e.g. "no
+  more than $X opened in this cycle across all symbols"). The
+  existing `max_positions=4` and `max_portfolio_exposure=0.50`
+  caps cover that direction. If the live bot shows portfolio-
+  level churn in the 90-day walk-forward, that's the next
+  blocker to add.
+
+---
+
 ## [0.3.0] — 2026-06-06 (Sweep observability, hourly-report intelligence, fundamentals)
 
 Build bumped to **0.3.0** (`pyproject.toml`, `src/__init__.py`).

@@ -124,6 +124,16 @@ class RiskConfig(BaseModel):
     # the book is bounded to 4 by default, which is enough room for
     # the strategy to express a view but not enough to blow up.
     max_positions: int = 4
+    # 2026-06-06 (v0.2.1): per-cycle aggregate notional cap per symbol.
+    # The per-position cap (max_position_pct) only bounds the *delta* of
+    # a single trade, not the *aggregate* of a close+reopen sequence
+    # within or across cycles. Without this, a symbol can stack the
+    # same dollar exposure by oscillating close+reopen — each trade
+    # reads `existing.exposure = 0` because the close ran first, and
+    # the cap is bypassed. Default equals max_position_pct (0.20):
+    # no symbol can have more than 20% of equity opened into it
+    # within a single cycle, regardless of replace count.
+    max_position_pct_per_cycle: float = 0.20
 
 
 class EngineConfig(BaseModel):

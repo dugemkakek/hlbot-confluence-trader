@@ -45,6 +45,9 @@ risk:
   take_profit_pct: 0.04
   max_leverage: 1
   max_daily_trades: 20
+  # 2026-06-06 (v0.2.1): per-cycle aggregate notional cap per symbol.
+  # See risk_manager.check_cycle_aggregate for rationale.
+  max_position_pct_per_cycle: 0.20
 
 engine:
   cycle_interval_seconds: 60

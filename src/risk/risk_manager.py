@@ -123,6 +123,16 @@ class RiskManager:
         # 2026-06-05: hard cap on simultaneous open positions.
         # Default 4 (dev.yaml uses 4 too). See risk_manager docstring.
         self._max_positions: int = r.max_positions
+        # 2026-06-06 (v0.2.1): per-cycle aggregate cap on notional opened
+        # per symbol. The per-position cap (max_position_pct) bounds the
+        # delta of a single trade; this bounds the SUM of all trades
+        # within a single orchestrator cycle. Closes the close+reopen
+        # bypass where a sequence of flips can stack exposure.
+        self._max_position_pct_per_cycle: float = r.max_position_pct_per_cycle
+        # _cycle_aggregate_notional: symbol -> cumulative notional opened
+        # in the current cycle. Reset at the start of each run_cycle()
+        # call by the orchestrator via reset_cycle_aggregates().
+        self._cycle_aggregate_notional: dict[str, float] = {}
 
         # ── Configurable sizing parameters ───────────────────────────────
         self._base_risk_per_trade_pct: float = 0.01  # 1% default
@@ -237,6 +247,18 @@ class RiskManager:
             await self._log_check(symbol, side, size_pct, False, reason, portfolio)
             return False, reason
 
+        # ── 3a. Per-cycle aggregate notional cap (v0.2.1) ───────────────
+        # Bounds the SUM of opened-notional for one symbol within a
+        # single cycle. Closes the close+reopen bypass where a sequence
+        # of flips can stack the same dollar exposure under the per-
+        # position cap. Placed after the per-position cap so a single
+        # oversized trade still fails the per-trade check first.
+        new_notional = size_pct * portfolio.total_equity
+        ok, reason = self.check_cycle_aggregate(symbol, new_notional, portfolio.total_equity)
+        if not ok:
+            await self._log_check(symbol, side, size_pct, False, reason, portfolio)
+            return False, reason
+
         # ── 4. Portfolio exposure ─────────────────────────────────────────
         ok, reason = self.check_portfolio_exposure(portfolio.exposure_pct)
         if not ok:
@@ -346,6 +368,70 @@ class RiskManager:
             False,
             f"Drawdown {drawdown:.2%} > max {self._max_drawdown_pct:.2%}",
         )
+
+    def check_cycle_aggregate(
+        self,
+        symbol: str,
+        new_notional: float,
+        total_equity: float,
+    ) -> tuple[bool, str]:
+        """v0.2.1 (2026-06-06): per-cycle aggregate notional cap per symbol.
+
+        The per-position cap (`max_position_pct`) only bounds the *delta*
+        of a single trade, not the *aggregate* of a close+reopen sequence
+        within a cycle. A close+reopen reads `existing.exposure = 0` at
+        the moment the cap is checked (the close ran first), so the cap
+        doesn't fire on the reopen — and the same dollar exposure can
+        be re-stacked.
+
+        This check sums the new trade's notional against the symbol's
+        running cycle-aggregate. If the total would exceed
+        `max_position_pct_per_cycle * total_equity`, the trade is blocked.
+
+        Parameters
+        ----------
+        symbol : str
+            Trading pair.
+        new_notional : float
+            Dollar notional of the proposed trade (entry × size, absolute).
+        total_equity : float
+            Current portfolio equity (denominator).
+        """
+        if total_equity <= 0 or new_notional <= 0:
+            return True, ""
+        cap_notional = self._max_position_pct_per_cycle * total_equity
+        existing = self._cycle_aggregate_notional.get(symbol, 0.0)
+        if existing + new_notional > cap_notional:
+            return (
+                False,
+                f"Cycle aggregate for {symbol} would be "
+                f"${existing + new_notional:.0f} > cap ${cap_notional:.0f} "
+                f"({self._max_position_pct_per_cycle:.0%} of equity) — "
+                f"limits how much can be opened into one symbol per cycle",
+            )
+        return True, ""
+
+    def record_cycle_aggregate(self, symbol: str, notional: float) -> None:
+        """v0.2.1: add `notional` to a symbol's running cycle-aggregate.
+
+        Called by the orchestrator after a successful fill. The aggregate
+        is the sum of all opened-notional for that symbol in the current
+        cycle, regardless of replace count.
+        """
+        if notional <= 0:
+            return
+        self._cycle_aggregate_notional[symbol] = (
+            self._cycle_aggregate_notional.get(symbol, 0.0) + notional
+        )
+
+    def reset_cycle_aggregates(self) -> None:
+        """v0.2.1: clear the per-symbol cycle-aggregate dict.
+
+        Called by the orchestrator at the start of each `run_cycle()`.
+        Aggregate is per-cycle, not per-day — a fresh cycle starts with
+        a clean slate so the strategy can respond to new conditions.
+        """
+        self._cycle_aggregate_notional.clear()
 
     def check_correlation_positions(
         self,

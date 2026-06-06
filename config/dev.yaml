@@ -16,6 +16,13 @@ risk:
   # See risk_manager.check_max_positions.
   max_daily_trades: 10
   max_positions: 4
+  # 2026-06-06 (v0.2.1): per-cycle aggregate cap on notional opened
+  # into a single symbol. Closes the close+reopen bypass that let
+  # ATOM scale to 19.5% of equity via a sequence of flips. Equals
+  # max_position_pct by default — a single symbol cannot absorb
+  # more than 20% of equity per cycle, regardless of how many
+  # times it's closed and reopened. See risk_manager.check_cycle_aggregate.
+  max_position_pct_per_cycle: 0.20
 
 executor:
   initial_balance: 50.0
