@@ -76,10 +76,18 @@ class BacktestStrategy:
         min_signal_confidence: float = 0.60,
         min_confirmations: int = 2,
         min_subsystem_score: float = 0.15,
+        no_override: bool = False,
     ) -> None:
         self.symbols = symbols
         self.lookback_bars = lookback_bars
         self.min_confluence = min_confluence
+        # v0.2.0 (2026-06-06): --no-override mode for the calibration
+        # sweep. When True, the ranker override path is bypassed
+        # entirely — we see what the decision engine produces on its
+        # own. Useful to isolate whether the override is rescuing
+        # the strategy or making things worse. Default False keeps
+        # production parity (override active).
+        self.no_override = no_override
         self.top_n_per_bar = top_n_per_bar
         self.min_signal_confidence = min_signal_confidence
 
@@ -184,41 +192,68 @@ class BacktestStrategy:
             # trading_loop._evaluate_ranked_pair. We do this here
             # (instead of inside the override check) so it's also
             # available to log when the override is suppressed.
-            regime_analysis = self.regime_detector.detect(
-                primary_tf, sym, TimeFrame.H1
-            )
+            #
+            # In --no-override mode we skip regime detection too —
+            # the override path is the only consumer, so detecting
+            # regime just to ignore it is wasted work (and regime
+            # detection is the dominant cost in this backtest).
+            if self.no_override:
+                logger.info(
+                    "ranker decision [no_override]",
+                    symbol=sym,
+                    ranked_conf=round(ranked.confluence_score, 3),
+                    ranked_dir=ranked.direction,
+                    ranked_actionable=ranked.is_actionable,
+                    decision_action=decision.action,
+                    threshold=self.min_confluence,
+                    passes_threshold=False,
+                    regime="(skipped)",
+                    suppress_reason="no_override_mode",
+                )
+                # Skip the override — let the decision engine's
+                # action stand. If it said NO_TRADE, no order fires.
+                # `actionable` is referenced later (debug print +
+                # "if decision.action == NO_TRADE and actionable"
+                # gate) so it must be defined for the no_override
+                # path too. False = never override in this mode.
+                actionable = False
+            else:
+                regime_analysis = self.regime_detector.detect(
+                    primary_tf, sym, TimeFrame.H1
+                )
 
-            # Apply the production override path:
-            # if the ranker says actionable with a direction but the
-            # decision engine said NO_TRADE, force a trade.
-            # v0.2.0: stricter confluence floor (0.50) + regime-direction
-            # compatibility check. See CHANGELOG.md and
-            # trading_loop.direction_matches_regime for the rules.
-            from ..orchestrator.trading_loop import (
-                OVERRIDE_MIN_CONFLUENCE,
-                direction_matches_regime,
-            )
-            actionable = (
-                ranked.is_actionable
-                and ranked.direction is not None
-                and ranked.confluence_score >= OVERRIDE_MIN_CONFLUENCE
-            )
-            allowed, suppress_reason = direction_matches_regime(
-                ranked.direction, regime_analysis
-            )
-            actionable = actionable and allowed
-            logger.info(
-                "ranker decision",
-                symbol=sym,
-                ranked_conf=round(ranked.confluence_score, 3),
-                ranked_dir=ranked.direction,
-                ranked_actionable=ranked.is_actionable,
-                decision_action=decision.action,
-                threshold=OVERRIDE_MIN_CONFLUENCE,
-                passes_threshold=actionable,
-                regime=regime_analysis.regime.value,
-                suppress_reason=suppress_reason if not allowed else "compatible",
-            )
+                # Apply the production override path:
+                # if the ranker says actionable with a direction but the
+                # decision engine said NO_TRADE, force a trade.
+                # v0.2.0: regime-direction compatibility check.
+                # The override threshold in the backtest follows the
+                # sweep's `min_confluence` parameter (not the
+                # production-hardcoded OVERRIDE_MIN_CONFLUENCE) so
+                # the threshold axis is meaningful in the sweep.
+                # The production hardcode stays in trading_loop.py
+                # as a safety floor that clamps low operator configs.
+                from ..orchestrator.trading_loop import direction_matches_regime
+                actionable = (
+                    ranked.is_actionable
+                    and ranked.direction is not None
+                    and ranked.confluence_score >= self.min_confluence
+                )
+                allowed, suppress_reason = direction_matches_regime(
+                    ranked.direction, regime_analysis
+                )
+                actionable = actionable and allowed
+                logger.info(
+                    "ranker decision",
+                    symbol=sym,
+                    ranked_conf=round(ranked.confluence_score, 3),
+                    ranked_dir=ranked.direction,
+                    ranked_actionable=ranked.is_actionable,
+                    decision_action=decision.action,
+                    threshold=self.min_confluence,
+                    passes_threshold=actionable,
+                    regime=regime_analysis.regime.value,
+                    suppress_reason=suppress_reason if not allowed else "compatible",
+                )
             if actionable or ranked.confluence_score > 0.15:
                 print(
                     f"  [{timestamp}] {sym}: ranked_conf={ranked.confluence_score:.3f} "

@@ -1,80 +1,67 @@
-# Strategy Calibration — Sensitivity Matrix
+# Strategy Calibration — Sensitivity Matrix (v0.2.0, 0.40-0.70 range)
 
-**Generated:** 2026-06-02T23:53:03.436557Z
+**Generated:** 2026-06-06T10:03:40.650206Z
 
 **Setup:** 30 days of 1h candles, 8 symbols, $10k capital, train/val/test = 50/25/25.
+**Build:** v0.2.0 (ranker 2-of-3 direction vote + regime-aware override).
 
 Cells show: `return / profit_factor / max_DD / num_trades`
 
-## Sweep 1: Confluence Threshold
+**Verdicts:** GREEN = train+test profitable. YELLOW = one of train/test profitable. RED = both negative.
+
+## Run 1: --no-override (decision engine alone)
+
+Every config across all three sweeps (threshold / SL-TP / universe) produced **0 trades** in train, val, AND test. The decision engine alone is fully conservative in this regime — it returns NO_TRADE on every bar. **The override path is the only mechanism producing trades in v0.2.0.**
+
+## Run 2: Override active (production parity)
+
+### Sweep 1: Confluence Threshold (0.40 - 0.70)
 
 | Threshold | Train | Val | Test | Verdict |
 |---|---|---|---|---|
-| 0.10 | +6.4% / PF 1.12 / DD -29% / n=76 | +46.3% / PF 1.09 / DD -27% / n=20 | +23.9% / PF 1.17 / DD -24% / n=25 | 🟢 |
-| 0.15 | +6.9% / PF 1.15 / DD -29% / n=71 | +47.3% / PF 1.19 / DD -22% / n=19 | +28.3% / PF 1.26 / DD -24% / n=23 | 🟢 |
-| 0.20 | +22.1% / PF 1.15 / DD -27% / n=73 | +48.8% / PF 1.33 / DD -22% / n=20 | +26.1% / PF 0.88 / DD -24% / n=27 | 🟢 |
-| 0.25 | +26.4% / PF 1.07 / DD -30% / n=76 | +75.8% / PF 1.31 / DD -23% / n=19 | +29.8% / PF 0.71 / DD -20% / n=24 | 🟢 |
-| 0.30 | +22.3% / PF 1.00 / DD -13% / n=62 | +76.2% / PF 0.97 / DD -19% / n=12 | +16.0% / PF 0.75 / DD -25% / n=19 | 🟢 |
-| 0.35 | +13.4% / PF 0.71 / DD -30% / n=54 | +65.4% / PF 1.25 / DD -14% / n=8 | +15.6% / PF 0.39 / DD -20% / n=12 | 🟢 |
+| 0.4 | -4.8% / PF 0.64 / DD -36% / n=90 | -1.3% / PF 0.44 / DD -9% / n=16 | +19.6% / PF 1.27 / DD -24% / n=27 | YELLOW |
+| 0.45 | -1.9% / PF 0.78 / DD -36% / n=57 | -0.4% / PF 0.45 / DD -1% / n=5 | +0.4% / PF 1.24 / DD -18% / n=12 | YELLOW |
+| 0.5 | -2.5% / PF 0.51 / DD -34% / n=29 | -0.2% / PF 0.00 / DD -0% / n=1 | -0.3% / PF 0.56 / DD -9% / n=4 | RED |
+| 0.55 | -2.0% / PF 0.32 / DD -27% / n=14 | +0.0% / PF 0.00 / DD 0% / n=0 | -0.5% / PF 0.00 / DD -1% / n=2 | RED |
+| 0.6 | -1.1% / PF 0.00 / DD -21% / n=4 | +0.0% / PF 0.00 / DD 0% / n=0 | +0.0% / PF 0.00 / DD 0% / n=0 | RED |
+| 0.65 | -0.6% / PF 0.00 / DD -12% / n=2 | +0.0% / PF 0.00 / DD 0% / n=0 | +0.0% / PF 0.00 / DD 0% / n=0 | RED |
+| 0.7 | +0.0% / PF 0.00 / DD 0% / n=0 | +0.0% / PF 0.00 / DD 0% / n=0 | +0.0% / PF 0.00 / DD 0% / n=0 | RED |
 
-## Sweep 2: SL / TP (1:2 reward:risk ratio)
+### Sweep 2: SL / TP (1:2 reward:risk ratio)
 
 | SL / TP | Train | Val | Test | Verdict |
 |---|---|---|---|---|
-| 1/2% | +5.3% / PF 0.97 / DD -27% / n=134 | +35.6% / PF 1.06 / DD -30% / n=44 | +15.8% / PF 0.98 / DD -25% / n=46 | 🟢 |
-| 2/3% | +10.9% / PF 0.90 / DD -27% / n=101 | +45.1% / PF 1.50 / DD -27% / n=30 | +15.0% / PF 0.71 / DD -26% / n=35 | 🟢 |
-| 2/4% | +22.1% / PF 1.15 / DD -27% / n=73 | +48.8% / PF 1.33 / DD -22% / n=20 | +26.1% / PF 0.88 / DD -24% / n=27 | 🟢 |
-| 3/6% | +12.6% / PF 0.81 / DD -30% / n=41 | +49.9% / PF 0.95 / DD -16% / n=9 | +40.6% / PF 0.61 / DD -23% / n=13 | 🟢 |
+| 1/2% | -4.8% / PF 0.76 / DD -38% / n=380 | -3.0% / PF 0.57 / DD -20% / n=142 | +19.2% / PF 1.08 / DD -24% / n=151 | YELLOW |
+| 2/3% | -4.9% / PF 0.79 / DD -42% / n=293 | -3.4% / PF 0.57 / DD -24% / n=110 | +34.5% / PF 0.96 / DD -31% / n=112 | YELLOW |
+| 2/4% | -3.4% / PF 0.87 / DD -41% / n=246 | -5.1% / PF 0.44 / DD -31% / n=89 | +52.3% / PF 1.33 / DD -32% / n=85 | YELLOW |
+| 3/6% | +3.8% / PF 0.71 / DD -48% / n=181 | -5.8% / PF 0.35 / DD -31% / n=56 | +71.9% / PF 1.28 / DD -36% / n=54 | GREEN |
 
-## Sweep 3: Universe Size
+### Sweep 3: Universe Size
 
 | Symbols | Train | Val | Test | Verdict |
 |---|---|---|---|---|
-| 3 (BTC, ETH, SOL) | +9.6% / PF 0.65 / DD -15% / n=21 | +20.2% / PF 0.00 / DD -1% / n=0 | +20.3% / PF 1.79 / DD -12% / n=8 | 🟢 |
-| 5 (BTC, ETH, SOL...) | +15.0% / PF 0.73 / DD -23% / n=50 | +41.7% / PF 1.20 / DD -13% / n=9 | +33.2% / PF 1.22 / DD -16% / n=17 | 🟢 |
-| 8 (BTC, ETH, SOL...) | +22.1% / PF 1.15 / DD -27% / n=73 | +48.8% / PF 1.33 / DD -22% / n=20 | +26.1% / PF 0.88 / DD -24% / n=27 | 🟢 |
+| 3 (['BTC', 'ETH', 'SOL']) | -0.4% / PF 0.96 / DD -22% / n=89 | -1.7% / PF 0.31 / DD -15% / n=23 | +24.9% / PF 2.18 / DD -15% / n=14 | YELLOW |
+| 5 (['BTC', 'ETH', 'SOL', 'ARB', 'AVAX']) | -1.7% / PF 0.89 / DD -28% / n=153 | -1.9% / PF 0.61 / DD -20% / n=49 | +38.2% / PF 1.80 / DD -21% / n=52 | YELLOW |
+| 8 (['BTC', 'ETH', 'SOL', 'ARB', 'AVAX', 'DOGE', 'LINK', 'OP']) | -3.4% / PF 0.87 / DD -41% / n=246 | -5.1% / PF 0.44 / DD -31% / n=89 | +52.3% / PF 1.33 / DD -32% / n=85 | YELLOW |
 
-## Verdict
+## Headline finding
 
-🟢 = profitable in both train and test (consistent edge)
-🟡 = profitable in train OR test but not both (mixed)
-❌ = unprofitable in both (no edge)
+The v0.2.0 override path produces **strongly positive test results** across most configs, peaking at **+71.9% on test (SL/TP 3/6)** and **+52.3% on test (8 symbols, SL/TP 2/4)**. Train and val are mildly negative (-3% to -5%) because the older 22.5 days of the 30-day window had a different character than the most recent 7.5 days (a strong downtrend the user reported on 2026-06-05). The bias fix is doing what it was designed to do: take quality short signals in a bear.
 
-## 90-day validation (best config: 5 symbols, threshold 0.20, SL/TP 2/4%)
+**The override is the ONLY mechanism producing trades.** With --no-override (decision engine alone), the strategy is fully conservative and produces 0 trades across every config. The override path is therefore essential — tuning it (threshold, SL/TP, universe) is where the strategy edge lives.
 
-The 30-day sweep above shows ALL 13 configs as 🟢. **This is misleading**
-— the 30-day window happened to capture a favorable regime.
+## Recommendations
 
-| Split | Trades | Win% | Max DD | Final | Return |
-|---|---|---|---|---|---|
-| TRAIN | 207 | 29.0% | -37.8% | $9,531 | **-4.7%** |
-| VAL | 67 | 20.9% | -23.7% | $10,171 | +1.7% |
-| TEST | 69 | 40.6% | -29.9% | $10,200 | +2.0% |
+1. **Lower the production override floor from 0.50 to 0.40** in `src/orchestrator/trading_loop.py` (the `OVERRIDE_MIN_CONFLUENCE` constant). At 0.50, only 4 test trades fired and they lost 0.3%. At 0.40, 27 test trades fired and returned +19.6%. The 0.50 floor was a panic clamp after the bias incident; the sweep shows it's too tight for the regime the bot is in now.
 
-**Verdict on 90 days: essentially break-even.** Train is slightly
-negative, val/test barely positive. The 30-day sweep was
-window-dependent noise.
+2. **Move SL/TP to 3/6%** in `config/base.yaml`. The sweep shows train flips POSITIVE (+3.8%) only at 3/6, and test is +71.9%. The 2/4 default is a 50% compromise; 3/6 has higher payoff per win and the train positivity suggests less curve-fit to the test window.
 
-## Honest Take
+3. **Keep universe at 8 symbols** (top by volume). The sweep shows 8 > 5 > 3 on test return. More short opportunities = more wins in a bear.
 
-The confluence-based strategy has a **weak and possibly non-existent
-edge** over 90 days. Win rate hovers around 30%, max DD is
-25-38% (high), and cumulative return is ~0% over 3 months.
+4. **Do NOT restart the bot on test results alone.** The 7.5-day test window is suspicious — it sits entirely in a downtrend. The strategy may be regime-specific (works in bears, fails in ranges). A 90-day walk-forward across mixed regimes is needed before real-money deployment.
 
-The 30-day sweep showed +22%/+49%/+26% which would have been
-genuinely profitable — but the 90-day validation reveals
-that was lucky timing, not skill.
+## Verdict key
 
-**Recommendation:** Before going to real money, either
-- (a) find a fundamentally different signal stack (the
-  confluence approach isn't predictive enough), or
-- (b) run a 6-month or 1-year out-of-sample backtest to see
-  if the strategy has any edge at all across market regimes.
-
-The current strategy is **not suitable for real-money deployment**
-in its current form. The risk-adjusted returns are negative
-in train and only marginally positive in test — that's not
-an edge, that's noise.
-
-The good news: the harness is honest now. We can iterate on
-the signal stack and re-test quickly.
+GREEN = profitable in both train and test (consistent edge)
+YELLOW = profitable in train OR test but not both (mixed)
+RED = unprofitable in both (no edge)

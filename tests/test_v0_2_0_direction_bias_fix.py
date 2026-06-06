@@ -30,6 +30,7 @@ from src.data.models import (
 )
 from src.orchestrator.trading_loop import (
     OVERRIDE_MIN_CONFLUENCE,
+    TradingOrchestrator,
     direction_matches_regime,
 )
 from src.signals.pair_ranker import PairRanker, RankedPair
@@ -64,6 +65,26 @@ def _make_candles(n: int = 60, base: float = 100.0, step: float = 0.5) -> list[N
             )
         )
     return out
+
+
+def _df_from_candles(candles: list[NormalizedCandle]) -> "pd.DataFrame":
+    """Build a pandas DataFrame from a list of NormalizedCandle.
+
+    The backtest strategy's on_bar expects history_by_symbol as
+    DataFrames indexed by timestamp. Mirrors what run_backtest.py
+    would feed it.
+    """
+    import pandas as pd
+    return pd.DataFrame(
+        {
+            "open": [c.open for c in candles],
+            "high": [c.high for c in candles],
+            "low": [c.low for c in candles],
+            "close": [c.close for c in candles],
+            "volume": [c.volume for c in candles],
+        },
+        index=pd.DatetimeIndex([c.timestamp for c in candles]),
+    )
 
 
 def _make_regime(regime: Regime, ema_fast: float = 100.0, ema_slow: float = 100.0) -> RegimeAnalysis:
@@ -321,10 +342,112 @@ class TestOverrideConfig:
             "trading_loop override path does not reference OVERRIDE_MIN_CONFLUENCE"
         )
 
-    def test_backtest_uses_override_floor_not_soft_floor(self):
-        """AST-level check: the backtest strategy override must
-        reference OVERRIDE_MIN_CONFLUENCE."""
+    def test_backtest_uses_sweep_threshold_as_override_floor(self):
+        """The backtest strategy's override threshold follows the
+        sweep's `min_confluence` parameter (not the production
+        hardcoded `OVERRIDE_MIN_CONFLUENCE`). The sweep is the test
+        of that threshold — clamping it to a production constant
+        makes the sweep degenerate (every config collapses to the
+        same floor). Production uses the hardcoded floor in
+        trading_loop.py as a safety clamp; the backtest is free
+        to test the full range.
+        """
+        import ast
+        import textwrap
         from src.backtest.strategy import BacktestStrategy
+        src = inspect.getsource(TradingOrchestrator._evaluate_ranked_pair)
+        assert "OVERRIDE_MIN_CONFLUENCE" in src, (
+            "trading_loop production override must use OVERRIDE_MIN_CONFLUENCE"
+        )
+
+        # Now check the backtest: the threshold comparison in the
+        # actionable condition must reference self.min_confluence,
+        # not OVERRIDE_MIN_CONFLUENCE. We do this with an AST walk
+        # so the comment-level references (which are fine) don't
+        # trip the test.
+        # inspect.getsource returns class-indented text; dedent
+        # before ast.parse or the first statement is "unexpected indent".
+        backtest_src = textwrap.dedent(inspect.getsource(BacktestStrategy._on_bar_async))
+        tree = ast.parse(backtest_src)
+        # Collect id() of Name nodes that are LHS of a Compare
+        # where the right side is `self.min_confluence` — those
+        # are threshold checks that follow the sweep parameter.
+        threshold_self_refs = 0
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Compare):
+                for comp in node.comparators:
+                    if (
+                        isinstance(comp, ast.Attribute)
+                        and comp.attr == "min_confluence"
+                        and isinstance(comp.value, ast.Name)
+                        and comp.value.id == "self"
+                    ):
+                        threshold_self_refs += 1
+        assert threshold_self_refs >= 1, (
+            "backtest override must compare confluence_score against "
+            "self.min_confluence (sweep parameter), not a hardcoded constant"
+        )
+        # Regime guard is still applied.
+        assert "direction_matches_regime" in backtest_src
+
+    def test_backtest_no_override_flag_skips_regime_and_override(self):
+        """The no_override flag bypasses the override path entirely
+        — the decision engine's NO_TRADE stands. Useful for the
+        calibration sweep's 'decision engine only' baseline."""
+        from src.backtest.strategy import BacktestStrategy
+        # The flag exists on the constructor and is stored.
+        import inspect
+        sig = inspect.signature(BacktestStrategy.__init__)
+        assert "no_override" in sig.parameters
+        assert sig.parameters["no_override"].default is False
+        # The flag is read in _on_bar_async (skips the override block).
         src = inspect.getsource(BacktestStrategy._on_bar_async)
-        assert "OVERRIDE_MIN_CONFLUENCE" in src
-        assert "direction_matches_regime" in src
+        assert "self.no_override" in src, (
+            "_on_bar_async must consult self.no_override to skip the override"
+        )
+
+    def test_backtest_on_bar_runs_in_both_modes_without_nameerror(self):
+        """Regression: a leftover logger.info call outside the
+        no_override/override branches referenced OVERRIDE_MIN_CONFLUENCE
+        and crashed with NameError in BOTH modes. This test exercises
+        the actual on_bar path in both modes against synthetic data
+        to catch the regression class.
+
+        Pins:
+        - no_override=True: regime detection is skipped, decision
+          engine's NO_TRADE stands, no NameError.
+        - no_override=False: regime detection runs, override applies
+          (or is suppressed by direction_matches_regime), no NameError.
+        """
+        import asyncio
+        from src.backtest.strategy import BacktestStrategy
+
+        candles = _make_candles(60)
+        # 3 symbols × 60 bars is enough to drive a few _on_bar_async calls
+        history = {
+            "BTC": _df_from_candles(candles),
+            "ETH": _df_from_candles(candles),
+            "SOL": _df_from_candles(candles),
+        }
+
+        for no_override in (True, False):
+            strat = BacktestStrategy(
+                symbols=["BTC", "ETH", "SOL"],
+                lookback_bars=50,
+                min_confluence=0.40,
+                top_n_per_bar=3,
+                no_override=no_override,
+            )
+            ts = candles[-1].timestamp
+            # _on_bar_async must not raise NameError. The result
+            # can be empty (no trades) — that's fine. We just need
+            # the path to complete.
+            try:
+                result = asyncio.run(strat.on_bar(ts, history))
+            except NameError as exc:
+                pytest.fail(
+                    f"_on_bar_async crashed with NameError when no_override={no_override}: {exc}"
+                )
+            assert isinstance(result, list), (
+                f"expected list of PendingOrder, got {type(result)} for no_override={no_override}"
+            )

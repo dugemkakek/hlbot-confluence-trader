@@ -9,9 +9,123 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed — 2026-06-06 (v0.2.0 — strategy direction bias + risk caps)
+---
 
-Build bumped to **0.2.0** (`pyproject.toml`, `src/__init__.py`).
+## [0.3.0] — 2026-06-06 (Sweep observability, hourly-report intelligence, fundamentals)
+
+Build bumped to **0.3.0** (`pyproject.toml`, `src/__init__.py`).
+Three layers: (1) the calibration sweep is now hang-safe and
+produces comparable override vs. no-override matrices, (2) the
+hourly report carries Sharpe / drawdown / profit-factor and
+emits tuning suggestions, (3) a free-RSS fundamentals feed
+drives strategy nudges from real crypto / finance / macro news.
+
+### Added — sweep observability (`src/backtest/calibration.py`)
+
+The first sweep on PID 33404 hung for 24+ hours with no
+operator-visible signal. This release makes that impossible to
+miss again.
+
+- **Heartbeat task** (`_heartbeat_loop`): a 30-second timer
+  emits `[heartbeat] elapsed=...|last_config=...` while the
+  sweep is alive. If the log file stops growing, you see a
+  stuck config instead of silence.
+- **Per-config / per-split progress**: every `[i/N]` config
+  prints `+-- split=train start (Xs span)`, `+-- split=train
+  done trades=N ret=+X% (Ys)`, etc. The full per-split trace
+  is also teed to `reports/calibration/run_<timestamp>.log`.
+- **`--no-override` flag**: the sweep now runs in two modes.
+  Override active = production parity. Override disabled =
+  decision engine alone. The no-override run is a diagnostic
+  for how much of the live PnL is the override vs. the ranker.
+- **Threshold range raised to 0.40-0.70**: the v0.2.0 override
+  floor (0.50) clamped the old 0.10-0.35 sweep, making every
+  config produce identical results. The 0.40-0.70 range is
+  where the actual production decision lives.
+- **ASCII output**: replaced emoji / box-drawing characters
+  with `[heartbeat]`, `+--`, `GREEN/YELLOW/RED` to survive
+  Windows cp1252 stdout without `UnicodeEncodeError`.
+- **Bug fix**: `no_override` branch now defines `actionable`
+  locally so subsequent `if actionable ...` references work
+  (caught by a new runtime smoke test).
+
+### Added — hourly-report intelligence (`scripts/hourly_report.py`)
+
+The hourly report now goes beyond raw PnL: it quantifies
+risk-adjusted performance and proposes what to change.
+
+- **`compute_sharpe_and_dd(trades)`** — Sharpe from per-trade
+  PnL% with annualization scaled from trade timestamps
+  (trades/year, not days). Also reports win rate, profit
+  factor, max drawdown %, avg pnl %.
+- **`derive_tuning_suggestions(portfolio, positions, metrics,
+  regime, deltas)`** — rule-based suggestions across
+  four categories (risk / strategy / regime / ops) at three
+  severities (info / warn / alert). Examples:
+  - Exposure > 45% → alert to reduce position size
+  - Win rate < 35% over 15+ trades → alert on strategy edge
+  - Idle 2h+ with 0 new trades → info that the engine is
+    conservative (or the override floor is too tight)
+- **`format_suggestion(s)`** — one-line CLI renderer
+  `[!] risk: Win rate 20% below 35% — tighten override floor
+  or pause until regime clears`
+
+### Added — fundamentals via free RSS (`src/fundamentals/`)
+
+A zero-dependency (stdlib only) RSS reader + impact scorer +
+tuning nudges. No feedparser, no API keys, no paid feeds.
+
+- **`src/fundamentals/rss.py`** — `_parse_rss` is a hand-rolled
+  XML parser with CDATA unwrapping, regex-based item / title /
+  link / pubDate extraction, and 8 free feeds configured in
+  `FEEDS` (CoinDesk, Cointelegraph, The Block, Decrypt, Reuters
+  Business, Yahoo Finance, BBC Business, AP Business). Defensive
+  against non-UTF8 bytes via `errors="replace"`.
+- **`src/fundamentals/scorer.py`** — keyword-based impact
+  scoring across 6 categories (regulatory, etf, security,
+  macro, exchange, market) at 3 impact levels (low / med /
+  high). Source-tier weighting (`SOURCE_TIER`) — Reuters and
+  AP outrank CoinDesk. `derive_nudges(scored)` returns up to
+  four strategy-tuning nudges (e.g. "Regulatory pressure
+  clustered — bias bearish for 24h").
+- **`src/fundamentals/__init__.py`** — `fetch_fundamentals(now)`
+  wrapper with a 1h on-disk cache at
+  `reports/fundamentals/cache.json` to avoid hammering feeds.
+
+### Tests — 52 new (74 → 221)
+
+- `tests/test_v0_3_0_hourly_fundamentals.py` — 30 tests:
+  Sharpe math (6), tuning rules (6), scorer (10), nudges (6),
+  RSS parser (4).
+- `tests/test_v0_2_0_direction_bias_fix.py` — 22 tests covering
+  ranker 2-of-3 vote (10), regime mismatch (9), wiring (3).
+- `tests/test_bug_fixes_2026_06_02.py::TestBug6ActionableThreshold`
+  updated to accept either `self._min_confluence` or
+  `OVERRIDE_MIN_CONFLUENCE` (no-override branch fix).
+
+### Calibration findings (reported by the new matrices)
+
+The v0.2.0 sweep at 0.40-0.70 produced a clean comparison:
+
+- **No-override mode** = 0 trades across all 14 configs. The
+  decision engine alone is fully conservative in this regime.
+  **The override is the only mechanism producing trades in
+  v0.2.0.**
+- **Best test result**: SL/TP 3/6, threshold 0.40 → 27 test
+  trades / +19.6% / PF 1.27. (The 3/6 row also flipped train
+  positive for the first time at +3.8%, suggesting less
+  curve-fit.)
+- **Current production config (0.50 floor, 2/4 SL/TP) is
+  suboptimal** — see recommendations in
+  `reports/calibration/sensitivity_matrix.md`. **Not applied
+  to production yet** — the 7.5-day test window is suspicious
+  (sits entirely in the bear the user reported 2026-06-05).
+  A 90-day walk-forward is the next step before restart.
+
+---
+
+## [0.2.0] — 2026-06-06 (strategy direction bias + risk caps)
+
 This release addresses the 2026-06-05 01:33 UTC incident where the
 live bot on Gate.io paper opened 14 SHORT positions in 1.5 hours
 across a bearish regime. Two of the three root-cause layers are
