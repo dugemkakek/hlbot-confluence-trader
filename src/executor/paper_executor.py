@@ -640,6 +640,7 @@ class PaperExecutor:
         strategy_name: str | None = None,
         signal_reason: dict[str, Any] | None = None,
         regime: str | None = None,
+        position_metadata: dict[str, Any] | None = None,
     ) -> OrderResult:
         """Place a paper order (market or limit).
 
@@ -652,6 +653,9 @@ class PaperExecutor:
             strategy_name: Optional strategy label for the journal.
             signal_reason: Optional signal metadata for the journal.
             regime: Optional market regime label.
+            position_metadata: 2026-06-06 (v0.2.3) — metadata written
+                into the new/updated Position (e.g. `entry_confluence`).
+                Default None leaves Position.metadata at its default {}.
 
         Returns:
             OrderResult with the filled SimulatedOrder or error details.
@@ -667,6 +671,7 @@ class PaperExecutor:
                     strategy_name,
                     signal_reason,
                     regime,
+                    position_metadata,
                 )
             except Exception as e:
                 logger.error("place_order unexpected error", symbol=symbol, error=str(e))
@@ -682,6 +687,7 @@ class PaperExecutor:
         strategy_name: str | None,
         signal_reason: dict[str, Any] | None,
         regime: str | None,
+        position_metadata: dict[str, Any] | None = None,
     ) -> OrderResult:
         """Internal order execution with full error handling."""
         # --- Risk checks ---
@@ -777,8 +783,10 @@ class PaperExecutor:
         )
         self._orders[order_id] = order
 
-        # Update position
-        self._update_position(symbol, side, filled_size, fill_price)
+        # Update position. position_metadata is plumbed through so the
+        # orchestrator can attach entry-time signals (e.g. entry_confluence)
+        # that survive the per-tick `_refresh_unrealized_pnl` reconstructions.
+        self._update_position(symbol, side, filled_size, fill_price, position_metadata)
 
         # --- Log to PostgreSQL ---
         await self._log_trade_journal(order, filled_size, fill_price, fee_cost)
@@ -873,10 +881,26 @@ class PaperExecutor:
         return min(raw, self._slippage_base_bps * 5)
 
     def _update_position(
-        self, symbol: str, side: OrderSide, size: float, fill_price: float
+        self,
+        symbol: str,
+        side: OrderSide,
+        size: float,
+        fill_price: float,
+        position_metadata: dict[str, Any] | None = None,
     ) -> None:
-        """Update or create a position after a fill."""
+        """Update or create a position after a fill.
+
+        position_metadata (2026-06-06 v0.2.3): free-form dict stored on the
+        Position. The orchestrator passes `entry_confluence` here so
+        `_rescore_open_positions` can compute the confluence-drop alert
+        without re-querying the decision log. For a NEW position the
+        metadata is used verbatim. For a SAME-DIRECTION average-in, the
+        existing metadata is preserved (entry signal is the same trade).
+        For an OPPOSITE-SIDE flip/close, the residual position's
+        metadata is reset to position_metadata (the new entry).
+        """
         existing = self._positions.get(symbol)
+        new_meta = position_metadata or {}
 
         if existing is None:
             # New position
@@ -890,6 +914,7 @@ class PaperExecutor:
                 unrealized_pnl_pct=0.0,
                 exposure=size * fill_price,
                 created_at=datetime.now(timezone.utc),
+                metadata=dict(new_meta),
             )
 
         elif existing.side == side:
@@ -909,6 +934,9 @@ class PaperExecutor:
                 unrealized_pnl_pct=0.0,
                 exposure=exposure,
                 created_at=existing.created_at,
+                # Same-direction average-in: preserve original entry
+                # metadata. If new keys were passed, merge them on top.
+                metadata={**existing.metadata, **new_meta},
             )
 
         else:
@@ -937,6 +965,10 @@ class PaperExecutor:
                         unrealized_pnl_pct=0.0,
                         exposure=residual * fill_price,
                         created_at=datetime.now(timezone.utc),
+                        # Flipped into new direction — entry signal is the
+                        # new trade. Drop the old entry's metadata; the
+                        # new metadata is the entry confluence for the flip.
+                        metadata=dict(new_meta),
                     )
                 else:
                     # Exact close — position fully removed
@@ -960,6 +992,9 @@ class PaperExecutor:
                     unrealized_pnl_pct=0.0,
                     exposure=remaining_size * fill_price,
                     created_at=existing.created_at,
+                    # Partial close of same-direction: entry signal is
+                    # the same trade — preserve + merge any new keys.
+                    metadata={**existing.metadata, **new_meta},
                 )
 
         # Recalculate unrealized PnL for this symbol using last fill price
@@ -992,6 +1027,10 @@ class PaperExecutor:
                 unrealized_pnl_pct=unrealized_pct,
                 exposure=pos.size * price,
                 created_at=pos.created_at,
+                # Preserve metadata across price-tick reconstructions.
+                # Without this, entry_confluence and any other entry-time
+                # signals would be wiped on every tick (v0.2.3 fix).
+                metadata=dict(pos.metadata),
             )
 
     async def _log_trade_journal(

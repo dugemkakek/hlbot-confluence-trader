@@ -11,6 +11,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.3] — 2026-06-06 (Position.metadata field + entry_confluence wiring)
+
+Build bumped to **0.2.3** (`pyproject.toml`, `src/__init__.py`).
+
+The v0.2.2 restart attempt crashed on its second cycle with
+`'Position' object has no attribute 'metadata'`. The bug is
+pre-existing (v0.2.0+) and only manifests after a position is
+opened: `_rescore_open_positions` reads `pos.metadata.get(...)` but
+the Position model has no `metadata` field. v0.2.3 fixes the model
+**and** wires the entry-time signals the read site was waiting for.
+
+### What changed
+
+**`src/data/models.py`** — added `metadata: dict[str, Any] = Field(default_factory=dict)` to `Position`. All existing Position constructions (paper executor, backtest engine, tests) are backward compatible — the field defaults to `{}`.
+
+**`src/executor/paper_executor.py`** — `place_order` and `_execute_order` accept an optional `position_metadata: dict | None = None` parameter, threaded through to `_update_position`. The four Position construction sites in `_update_position` now handle metadata:
+
+| Path | Metadata behavior |
+|---|---|
+| New position | `metadata=dict(position_metadata)` — fresh entry |
+| Same-direction average-in | `{**existing.metadata, **new_meta}` — preserve + merge |
+| Opposite-side full close + flip | `metadata=dict(new_meta)` — drop old, new entry's metadata |
+| Partial close of same direction | `{**existing.metadata, **new_meta}` — preserve + merge |
+
+**`_refresh_unrealized_pnl`** — preserves `metadata=dict(pos.metadata)` across the per-tick Position rebuild. Without this, the entry_confluence (and any other entry-time signal) would be wiped on the first price tick, silently disabling the confluence-drop alert.
+
+**`src/orchestrator/trading_loop.py`** — new helper `_build_entry_metadata(decision)` looks up the ranked pair for the symbol in `self._current_ranked_pairs` and returns a dict with `entry_confluence`, `entry_structure`, `entry_momentum`, `entry_pullback`, `entry_volume`, `entry_direction`, `entry_confidence`, and `entry_regime`. `_execute_decision` passes this to `place_order(position_metadata=...)`.
+
+### Pre-existing bug discovered (deferred to v0.2.4)
+
+While writing the flip-path tests, an unrelated bug surfaced in
+`_update_position`'s opposite-side branch: the residual side
+calculation inverts the new order's side
+(`new_side = OrderSide.SHORT if side == OrderSide.LONG else OrderSide.LONG`
+should be `new_side = side`). This means a SHORT that flips a LONG
+ends up with a LONG residual. It's silent (no error, no audit
+warning) and only triggers on `size >= existing.size` with opposite
+sides — not the v0.2.0 bear case the override was hardened against
+but a separate pathway.
+
+The v0.2.3 test `test_flip_metadata_resets_even_if_side_bug_persists`
+pins the metadata behavior in isolation so the v0.2.4 fix can be
+narrowly scoped to the residual-side line without touching the
+metadata plumbing.
+
+### Restart
+
+After this commit the live bot can be restarted with the same
+`logs/launch_bot.cmd` flow as v0.2.2. The crash on the second
+cycle is gone — the cycle that was failing on `Position.metadata`
+will now read `entry_confluence` from the dict and complete. The
+confluence-drop alert (warning + WebSocket broadcast when an open
+position's confluence falls >0.30 below entry) is now actually
+operational.
+
+### Tests
+
+- 17 new tests in `tests/test_v0_2_3_position_metadata.py`:
+  - `TestPositionModelMetadata` (4): default empty, accept dict, nested dict, doesn't clobber other fields
+  - `TestPlaceOrderMetadataPlumbing` (6): verbatim on new, default empty, average-in preserve+merge, partial close preserve+merge, flip reset, flip metadata isolation
+  - `TestRefreshUnrealizedPnlPreservesMetadata` (3): single refresh, repeated refreshes, empty stays empty
+  - `TestRescoreOpenPositionsRegression` (4): empty doesn't crash, full reads correctly, drop detected, no alert when unchanged
+
+Total: **253/253 passing** (236 → 253).
+
+---
+
 ## [0.2.2] — 2026-06-06 (production config: sweep + walk-forward recommendations applied)
 
 Build bumped to **0.2.2** (`pyproject.toml`, `src/__init__.py`).

@@ -215,6 +215,13 @@ class Position(BaseModel):
     unrealized_pnl_pct: float
     exposure: float
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    # 2026-06-06 (v0.2.3): free-form metadata slot for position-scoped
+    # bookkeeping. The orchestrator writes `entry_confluence` here on open
+    # so `_rescore_open_positions` can compute the confluence-drop alert
+    # without re-querying the decision log. Also used to preserve data
+    # through `_refresh_unrealized_pnl` reconstructions, where Position
+    # is rebuilt from scratch on every price tick.
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class PortfolioSummary(BaseModel):

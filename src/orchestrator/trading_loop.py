@@ -991,13 +991,21 @@ class TradingOrchestrator:
             return
 
         # Place the order. NOTE: PaperExecutor.place_order() signature is
-        # (symbol, side, size, order_type, limit_price, strategy_name, signal_reason, regime).
-        # It does NOT take entry_price / stop_loss / take_profit — those are computed
-        # internally from fill_price + cfg.risk (see paper_executor._execute_order).
-        # The earlier call passed entry_price=... which raised TypeError and blocked
-        # every trade. Mapped entry_price -> limit_price; dropped stop/tp (the executor
-        # derives them). 2026-06-02.
+        # (symbol, side, size, order_type, limit_price, strategy_name,
+        #  signal_reason, regime, position_metadata).
+        # It does NOT take entry_price / stop_loss / take_profit — those are
+        # computed internally from fill_price + cfg.risk (see
+        # paper_executor._execute_order).
+        # The earlier call passed entry_price=... which raised TypeError and
+        # blocked every trade. Mapped entry_price -> limit_price; dropped
+        # stop/tp (the executor derives them). 2026-06-02.
+        # 2026-06-06 (v0.2.3): pass `position_metadata` carrying the
+        # ranked pair's confluence_score so `_rescore_open_positions`
+        # can compute the confluence-drop alert. Without this, the
+        # alert path crashed on `Position.metadata` (which did not
+        # exist as a field).
         order_side = OrderSide.LONG if decision.action == "BUY" else OrderSide.SHORT
+        entry_metadata = self._build_entry_metadata(decision)
         result = await self.executor.place_order(
             symbol=decision.symbol,
             side=order_side,
@@ -1005,6 +1013,7 @@ class TradingOrchestrator:
             order_type=OrderType.MARKET,
             limit_price=decision.entry,
             strategy_name="decision_engine",
+            position_metadata=entry_metadata,
         )
 
         if result.success:
@@ -1063,6 +1072,35 @@ class TradingOrchestrator:
         for position in positions:
             await self.risk_manager.check_and_close_if_needed(position)
 
+    def _build_entry_metadata(self, decision: Decision) -> dict[str, Any]:
+        """Build the position_metadata dict for a fresh position open.
+
+        2026-06-06 (v0.2.3): looks up the ranked pair for this symbol
+        in `self._current_ranked_pairs` and attaches the entry-time
+        signals the executor needs to surface in the position record.
+        Specifically `entry_confluence` is consumed by
+        `_rescore_open_positions` to detect a confluence drop on open
+        positions; without it, the alert path would either crash
+        (v0.2.0-v0.2.2) or stay silent.
+
+        Always returns a dict (possibly empty if no ranked pair is
+        available — the executor's default is `{}`).
+        """
+        meta: dict[str, Any] = {}
+        for rp in self._current_ranked_pairs:
+            if rp.symbol == decision.symbol:
+                meta["entry_confluence"] = float(rp.confluence_score)
+                meta["entry_structure"] = float(rp.structure_score)
+                meta["entry_momentum"] = float(rp.momentum_score)
+                meta["entry_pullback"] = float(rp.pullback_score)
+                meta["entry_volume"] = float(rp.volume_score)
+                meta["entry_direction"] = rp.direction
+                meta["entry_confidence"] = float(rp.confidence)
+                break
+        if decision.regime is not None:
+            meta["entry_regime"] = decision.regime.value
+        return meta
+
     async def _rescore_open_positions(
         self,
         ranking_result: PairRankingResult,
@@ -1091,8 +1129,14 @@ class TradingOrchestrator:
             if not pos:
                 continue
 
-            # Calculate confluence drop from entry
-            entry_confluence = pos.metadata.get("entry_confluence", None) if pos.metadata else None
+            # Calculate confluence drop from entry. Position.metadata
+            # is a dict field on the live Position model (v0.2.3); the
+            # orchestrator writes `entry_confluence` into it on open via
+            # `place_order(position_metadata=...)`. The `or {}` guard
+            # stays for defense-in-depth — a stale Position from a
+            # pre-v0.2.3 session could still have metadata=None if the
+            # model ever loosens to Optional.
+            entry_confluence = (pos.metadata or {}).get("entry_confluence", None)
             current_confluence = ranked.confluence_score
 
             if entry_confluence is not None:
