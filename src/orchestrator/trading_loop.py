@@ -35,13 +35,17 @@ Key changes vs. old version:
 from __future__ import annotations
 
 import asyncio
+import json
+import os
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from ..data.hyperliquid_ws import HyperliquidWebSocket
 from ..data.hyperliquid_rest import HyperliquidREST
 from ..data.models import Decision, NormalizedCandle, TimeFrame, Side, OrderSide, OrderType
 from ..data.trade_db import log_trade, log_cycle, TradeRecord
+from .. import __version__
 from ..signals.technical import TechnicalSignals
 from ..signals.registry import SignalRegistry, AggregatedSignal
 from ..signals.regime_detector import RegimeDetector, RegimeAnalysis
@@ -522,6 +526,16 @@ class TradingOrchestrator:
                 regime=regime_str,
             )
             log_trade(trade)
+
+        # 2026-06-07 (v0.2.6): persist current equity to disk so the
+        # launcher can carry it across restarts. The bot's in-memory
+        # state is lost on stop (open positions, PnL) but the cash
+        # account can be preserved by writing total_equity here. The
+        # launcher reads this file and sets HL_EXECUTOR_INITIAL_BALANCE
+        # before spawning the new process. If the file is missing or
+        # corrupt, the launcher falls back to config/dev.yaml's
+        # initial_balance.
+        self._persist_equity_state()
 
     # ─────────────────────────────────────────────────────────────────────────────
     # Step implementations
@@ -1100,6 +1114,50 @@ class TradingOrchestrator:
         if decision.regime is not None:
             meta["entry_regime"] = decision.regime.value
         return meta
+
+    def _persist_equity_state(self) -> None:
+        """Write current equity snapshot to data/bot_equity.json.
+
+        2026-06-07 (v0.2.6): the launcher reads this file on restart
+        to set HL_EXECUTOR__INITIAL_BALANCE, so the bot's cash
+        account carries over across restarts. In-memory positions
+        and PnL are still lost on restart — this preserves cash
+        only.
+
+        Failures are non-fatal: a corrupt or unwritable state file
+        means the launcher falls back to config/dev.yaml on next
+        start. We log and continue.
+        """
+        if self.executor is None:
+            return
+        try:
+            portfolio = self.executor.get_portfolio()
+            state = {
+                "version": 1,
+                "last_equity": round(portfolio.total_equity, 8),
+                "last_cash": round(portfolio.cash_balance, 8),
+                "last_unrealized_pnl": round(portfolio.unrealized_pnl, 8),
+                "last_realized_pnl": round(portfolio.realized_pnl, 8),
+                "last_positions_count": len(portfolio.positions),
+                "last_update_utc": datetime.now(timezone.utc).isoformat(),
+                "bot_version": __version__,
+            }
+            # Path: <project_root>/data/bot_equity.json
+            # trading_loop.py is at src/orchestrator/trading_loop.py
+            # so 3 levels up gets to project root.
+            project_root = Path(__file__).parent.parent.parent
+            data_dir = project_root / "data"
+            data_dir.mkdir(parents=True, exist_ok=True)
+            state_path = data_dir / "bot_equity.json"
+            # Atomic write: write to .tmp then rename so a crash
+            # mid-write doesn't leave a half-written file.
+            tmp_path = state_path.with_suffix(".json.tmp")
+            tmp_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+            os.replace(tmp_path, state_path)
+        except Exception as exc:
+            # Non-fatal — log and continue. The bot keeps running
+            # even if the state file can't be written.
+            logger.warning("Failed to persist equity state", error=str(exc))
 
     async def _rescore_open_positions(
         self,

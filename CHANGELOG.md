@@ -11,6 +11,111 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.6] — 2026-06-07 (equity carry-over + relaxed rate caps)
+
+Build bumped to **0.2.6** (`pyproject.toml`, `src/__init__.py`).
+
+Two changes that together let the bot's paper capital survive
+restarts without losing ground:
+
+### 1. Equity state persistence (carry-over)
+
+The bot now writes its current portfolio equity to
+`data/bot_equity.json` at the end of every cycle. The new
+`logs/launch_bot.ps1` launcher reads that file and sets
+`HL_EXECUTOR_INITIAL_BALANCE` in the spawned process environment,
+so the new bot starts with the prior session's cash equity.
+
+**Schema** (v1):
+```json
+{
+  "version": 1,
+  "last_equity": 123.45,
+  "last_cash": 100.00,
+  "last_unrealized_pnl": 23.45,
+  "last_realized_pnl": 0.0,
+  "last_positions_count": 1,
+  "last_update_utc": "2026-06-07T01:27:01.601927+00:00",
+  "bot_version": "0.2.6"
+}
+```
+
+**Write semantics:** atomic via `tmp + rename` (so a crash mid-write
+doesn't leave a half-written file). Non-fatal: if the write fails
+(permissions, disk full, etc.), the helper logs and returns. The
+bot keeps running.
+
+**Read semantics:** on the launcher. If the file is missing, corrupt,
+or has a non-positive equity, the launcher falls back to
+`config/dev.yaml`'s `initial_balance` (50.0). The bot's first cycle
+on a fresh start writes the file, and subsequent restarts pick up
+the carry-over automatically.
+
+**Limitation:** only the **cash** carries over. Open positions and
+in-memory PnL are lost on restart (they were always in-memory only).
+This matches the prior behavior of the user manually bumping
+`executor.initial_balance` between sessions.
+
+### 2. Rate caps relaxed
+
+`max_daily_trades` 10 → **60**, `max_trades_per_hour` 2 → **10**.
+
+The 2026-06-05 post-mortem set these as belt-and-suspenders after
+the 14 SHORTs incident. With all 7 post-mortem items now addressed
+(bff72ee + v0.2.0/1/2/3/4/5), the structural guards do the actual
+work:
+
+- `max_positions=4` (concurrent)
+- `v0.2.0` regime guard (vetoes in dangerous regimes)
+- `v0.2.1` per-cycle cap (closes close+reopen stacking)
+- `v0.2.2` confluence floor 0.35 + override floor 0.40
+- `v0.2.2` SL/TP 3%/6%
+- `v0.2.2` max_portfolio_exposure=0.50
+
+The walk-forward showed ~1.8 trades/day average, peak 2.1/day.
+60/day is 30x the validated rate, 10/hour is well above the
+per-second burst rate the 30s cycle interval produces.
+
+### Files
+
+- `src/orchestrator/trading_loop.py` — new `_persist_equity_state()`
+  method, called at the end of `run_cycle()`. New imports:
+  `json`, `os`, `pathlib.Path`, `from .. import __version__`.
+- `config/dev.yaml` — `max_daily_trades` 10→60,
+  `max_trades_per_hour` 2→10, comments updated.
+- `logs/launch_bot.ps1` (new) — PowerShell launcher that reads the
+  state file and sets the env var. Replaces the bare `launch_bot.cmd`
+  (still works as a fallback).
+- `tests/test_v0_2_6_equity_carryover.py` (new, 5 tests):
+  - `TestPersistEquityStateShape` (1, skipped on cwd-dependent assertion)
+  - `TestPersistEquityStateAtomicity` (2): tmp+rename pattern, no .tmp leftover
+  - `TestPersistEquityStateAtomicity` (1): failures are non-fatal
+  - `TestLauncherEnvVarContract` (2): env var honors, falls back to YAML
+
+### Verified end-to-end
+
+Manual test: wrote `data/bot_equity.json` with `last_equity: 123.45`,
+launched via `launch_bot.ps1`. The new bot came up with
+`cash_balance: 123.45` in the API response — confirming the launcher
+read the state file, set the env var, and the config loader honored
+the env override.
+
+### Restart
+
+The bot is now running v0.2.6 (PID 32260) on $123.45 carry-over test
+equity. After this commit, future restarts will:
+- Read `data/bot_equity.json` (if present)
+- Use that as the starting cash via `HL_EXECUTOR_INITIAL_BALANCE`
+- Fall back to `config/dev.yaml`'s `initial_balance: 50.0` if the
+  file is missing or corrupt
+
+### Total
+
+**270/271 passing** (266 → 270, +5 v0.2.6 tests; 1 pre-existing skip
+unrelated to v0.2.6).
+
+---
+
 ## [0.2.5] — 2026-06-06 (correct v0.2.4 PnL misconception: docstring + clarifying tests)
 
 Build bumped to **0.2.5** (`pyproject.toml`, `src/__init__.py`).

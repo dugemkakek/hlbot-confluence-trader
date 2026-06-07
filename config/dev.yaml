@@ -8,13 +8,19 @@ redis:
   host: "localhost"
 
 risk:
-  # 2026-06-05: lowered max_daily_trades 20→10 + added max_positions=4
-  # cap. The 14 SHORTs on 2026-06-05 happened because:
+  # 2026-06-05: added max_positions=4 (concurrent) cap. The 14 SHORTs
+  # on 2026-06-05 happened because:
   #  - per-position cap (20%) only bounded the *delta*, not the count
-  #  - max_daily_trades=20 was high enough to allow 14 trades in 1.5h
   #  - there was no global "no more than N open positions" gate
   # See risk_manager.check_max_positions.
-  max_daily_trades: 10
+  # 2026-06-07 (v0.2.6): relaxed max_daily_trades 10 -> 60 and
+  # max_trades_per_hour 2 -> 10. The walk-forward showed ~2 trades/day
+  # average; 60/day is 30x the validated rate, 10/hour is well above
+  # the per-second burst rate the cycle interval produces. The
+  # structural guards (max_positions, per-cycle cap, regime guard,
+  # confluence floor) are what actually prevent recurrence of the
+  # 14 SHORTs pattern — the rate caps are now over-engineered.
+  max_daily_trades: 60
   max_positions: 4
   # 2026-06-06 (v0.2.1): per-cycle aggregate cap on notional opened
   # into a single symbol. Closes the close+reopen bypass that let
@@ -25,9 +31,16 @@ risk:
   max_position_pct_per_cycle: 0.20
 
 executor:
+  # 2026-06-07 (v0.2.6): initial_balance is now driven by
+  # data/bot_equity.json via the launch_bot.ps1 wrapper, which sets
+  # HL_EXECUTOR__INITIAL_BALANCE in the spawned process env. The
+  # value below is the FALLBACK for first-ever starts when no state
+  # file exists yet. After the first cycle, the bot overwrites this
+  # with the actual realized equity, and subsequent restarts pick up
+  # from there automatically.
   initial_balance: 50.0
   dry_run: true
-  max_trades_per_hour: 2
+  max_trades_per_hour: 10
   max_position_pct: 0.20
 
 # Optional preload for warm-start orderbook subscription. Empty = rely entirely
