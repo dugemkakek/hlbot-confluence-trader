@@ -708,15 +708,19 @@ class TestMaxPositionsCap:
         """4 SHORTs already open → 5th SHORT must be blocked."""
         rm, executor = risk_manager
         rm._max_positions = 4  # matches dev.yaml
-        # Override cash + peak so neither the drawdown check nor the
-        # portfolio-exposure check fires before max_positions. With
-        # initial_balance=10 (v0.2.7), the default cash of 10 plus
-        # 4*10 exposure = 80% > 50% cap would trip exposure first.
-        # Set cash to 50 so total_equity=90 → exposure=40 → 44% < 50%.
-        executor._cash = 50.0
-        rm._peak_equity = executor._cash
-
+        # v0.2.9: with the corrected equity formula, a SHORT book's
+        # total_equity is smaller (cash - short_exposure). We need
+        # (a) enough cash that exposure_pct < 50% even after the 5th
+        #     order, and
+        # (b) peak_equity >= current_equity so the drawdown breaker
+        #     doesn't fire before max_positions.
+        # cash=150 → 4 SHORTs of $10 → total_equity = 150 - 40 = 110.
+        # 5th order 5% × 110 = $5.50 notional. New exposure = 45.5,
+        # new equity = 150 - 45.5 = 104.5. exposure_pct = 45.5/104.5 = 43.5%
+        # (under 50%). Good — exposure check passes, drawdown check
+        # passes (peak = current), only max_positions trips.
         from src.data.models import Position, OrderSide
+        executor._cash = 150.0
         for sym in ["BTC", "ETH", "SOL", "AVAX"]:
             executor._positions[sym] = Position(
                 symbol=sym, side=OrderSide.SHORT, size=0.1,
@@ -725,6 +729,10 @@ class TestMaxPositionsCap:
                 exposure=10.0,
                 created_at=datetime.now(timezone.utc),
             )
+        # Set peak_equity to the POST-position equity so the
+        # drawdown breaker (step 1 of pre_trade_check) is inactive.
+        portfolio = executor.get_portfolio()
+        rm._peak_equity = portfolio.total_equity
 
         async def run():
             ok, reason = await rm.pre_trade_check(
@@ -750,11 +758,11 @@ class TestMaxPositionsCap:
                 exposure=10.0,
                 created_at=datetime.now(timezone.utc),
             )
-        # 3 SHORTs credit $10 cash each, so cash goes from 50 → 80.
-        # Equity = 80 cash + 30 exposure + 0 pnl = 110.
-        # Set peak = current to neutralise the drawdown breaker —
-        # this test is about max_positions, not drawdown.
-        executor._cash = 80.0
+        # v0.2.9: with the corrected equity formula, a SHORT book's
+        # total_equity is cash - short_exposure. We need cash high
+        # enough that the 4th order (5% of equity) keeps exposure_pct
+        # under 50%. cash > 102 keeps us under after the 4th.
+        executor._cash = 130.0
         portfolio = executor.get_portfolio()
         rm._peak_equity = portfolio.total_equity
 

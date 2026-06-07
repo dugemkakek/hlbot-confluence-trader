@@ -11,6 +11,90 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.9] — 2026-06-07 (fix equity formula + per-side breakdown)
+
+Build bumped to **0.2.9** (`pyproject.toml`, `src/__init__.py`).
+
+Real bug fix. The pre-v0.2.9 `total_equity` formula was:
+
+    total_equity = cash + sum(exposure) + sum(unrealized)
+
+This treated SHORT positions as positive value, but a SHORT is
+a **liability** (you owe the asset). For an all-SHORT book, the
+formula inflated equity by the SHORT notional.
+
+**Correct formula** (mark-to-market accounting):
+
+    total_equity = cash + exposure_long - exposure_short + unrealized
+
+`exposure_long` and `exposure_short` are split by side. The
+`unrealized_pnl` term is already correctly signed for both
+sides (LONG: positive when price up; SHORT: positive when
+price down), so no change there.
+
+### Live example
+
+Bot's current state: 4 SHORT positions, $6.18 total SHORT
+notional, $16.14 cash, ~$0 unrealized PnL.
+
+| Metric | Pre-v0.2.9 | Post-v0.2.9 |
+|---|---|---|
+| `total_equity` | $22.28 | **$9.93** |
+| `cash_balance` | $16.14 | $16.14 |
+| `exposure` (sum) | $6.18 | $6.18 |
+
+The OLD number was wrong by $12.35 — the SHORT notional was
+being added to equity when it should subtract.
+
+### New fields on `PortfolioSummary`
+
+| Field | Meaning |
+|---|---|
+| `exposure_long_usd` | Sum of `size × current_price` for LONG positions |
+| `exposure_short_usd` | Sum of `size × current_price` for SHORT positions |
+| `position_count_long` | Number of LONG positions |
+| `position_count_short` | Number of SHORT positions |
+| `available_cash_usd` | `cash_balance - exposure_short_usd` (true free cash, excludes borrowed-asset proceeds) |
+
+The `exposure` field is preserved (sum of long + short) for
+backward compat with the 50% portfolio cap denominator.
+
+### Files
+
+- `src/data/models.py` — 5 new fields on `PortfolioSummary`
+- `src/executor/paper_executor.py` — corrected `get_portfolio()`
+- `tests/test_v0_2_9_equity_breakdown.py` (new, 7 tests):
+  - LONG-only: equity = cash + long
+  - SHORT-only: equity = cash - short (the headline fix)
+  - SHORT-only equity preserved when opening (no inflation)
+  - Mixed LONG+SHORT: equity = cash - short + long
+  - SHORT price drop: equity grows by short_exposure decrease + unrealized
+  - LONG price rise: equity grows by long_exposure increase + unrealized
+- `tests/test_risk_and_execution.py` — 2 max_positions tests
+  updated to use larger cash values (the corrected formula means
+  SHORT-heavy books have less apparent equity, so the 50%
+  exposure cap fires sooner; tests need more headroom).
+
+### Total
+
+**294/295 passing** (288 → 294, +7 v0.2.9 tests; 1 pre-existing
+skip; 2 risk tests retuned for the new formula).
+
+### Live verified
+
+After restart on v0.2.9, portfolio shows the new fields:
+
+```
+Cash:               $16.14
+Total equity:       $9.93   ← was $22.28 with the old (buggy) formula
+Exposure LONG:      $0.00
+Exposure SHORT:     $6.18
+Available cash:     $9.96   ← true free cash (excludes borrowed-asset proceeds)
+Open positions:     4 (all SHORT)
+```
+
+---
+
 ## [0.2.8] — 2026-06-07 (unrealized_pnl_pct → unrealized_pnl_percent rename)
 
 Build bumped to **0.2.8** (`pyproject.toml`, `src/__init__.py`).

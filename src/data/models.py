@@ -236,6 +236,22 @@ class PortfolioSummary(BaseModel):
     exposure: float
     exposure_pct: float
     positions: list[Position] = Field(default_factory=list)
+    # 2026-06-07 (v0.2.9): per-side exposure breakdown. Pre-v0.2.9
+    # `total_equity` was `cash + sum(exposure)` which treated
+    # SHORTs as positive value. Correct formula treats LONG
+    # exposure as an asset and SHORT exposure as a liability:
+    #   total_equity = cash + exposure_long - exposure_short + unrealized
+    # These fields make the breakdown visible in the API.
+    exposure_long_usd: float = 0.0
+    exposure_short_usd: float = 0.0
+    position_count_long: int = 0
+    position_count_short: int = 0
+    # Cash that's truly free (excludes borrowed-asset proceeds
+    # for SHORTs, which are owed back to the exchange on close).
+    # available_cash_usd = cash_balance - exposure_short_usd
+    # In paper mode this is informational. In live mode it would
+    # be the basis for withdrawal / margin calculations.
+    available_cash_usd: float = 0.0
 
 
 class Regime(str, Enum):

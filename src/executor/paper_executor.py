@@ -1365,10 +1365,44 @@ class PaperExecutor:
         return list(self._positions.values())
 
     def get_portfolio(self) -> PortfolioSummary:
-        """Compute and return the current portfolio summary."""
-        total_exposure = sum(p.exposure for p in self._positions.values())
-        total_unrealized = sum(p.unrealized_pnl for p in self._positions.values())
-        total_equity = self._cash + total_exposure + total_unrealized
+        """Compute and return the current portfolio summary.
+
+        2026-06-07 (v0.2.9): per-side exposure split. Pre-v0.2.9
+        `total_equity` was `cash + sum(exposure)` which treated
+        SHORT exposure as an asset, inflating the equity number
+        by the SHORT notional. Correct formula:
+
+          total_equity = cash + exposure_long - exposure_short + unrealized
+
+        This matches standard mark-to-market accounting: a SHORT
+        is a liability (you owe the asset), so its notional
+        subtracts from equity. LONG exposure is an asset.
+        Unrealized PnL is correctly signed for both sides.
+        """
+        positions = list(self._positions.values())
+        exposure_long = sum(p.exposure for p in positions if p.side == OrderSide.LONG)
+        exposure_short = sum(p.exposure for p in positions if p.side == OrderSide.SHORT)
+        # Pre-v0.2.9: total_exposure = exposure_long + exposure_short.
+        # We keep the `exposure` field as the sum (some consumers
+        # use it for the 50% portfolio cap, where the side-mix
+        # doesn't matter), but the per-side fields and the
+        # corrected equity formula use the split.
+        total_exposure = exposure_long + exposure_short
+        total_unrealized = sum(p.unrealized_pnl for p in positions)
+        total_equity = (
+            self._cash
+            + exposure_long
+            - exposure_short
+            + total_unrealized
+        )
+        # Cash that's truly free (excludes borrowed-asset proceeds
+        # for SHORTs). available_cash = cash - short_notional.
+        # For an all-LONG book, this equals cash. For an all-SHORT
+        # book where cash has grown to match the SHORT notional,
+        # available_cash is 0 — every dollar of cash is owed back.
+        available_cash = self._cash - exposure_short
+        position_count_long = sum(1 for p in positions if p.side == OrderSide.LONG)
+        position_count_short = sum(1 for p in positions if p.side == OrderSide.SHORT)
 
         return PortfolioSummary(
             total_equity=round(total_equity, 2),
@@ -1379,18 +1413,21 @@ class PaperExecutor:
             margin_used=0.0,  # Paper trading — no actual margin
             exposure=round(total_exposure, 2),
             # 2026-06-04: changed denominator from initial_balance to
-            # total_equity. Using initial_balance made the cap relative
-            # to a stale $50 baseline, so as cash/equity drifted, the
-            # bot kept adding positions until exposure_pct crossed 50%
-            # only after the fact. The risk check is called per-entry
-            # with the pre-trade portfolio, so the denominator must
-            # reflect current equity for the cap to be meaningful.
+            # total_equity. v0.2.9: total_equity is now correctly
+            # signed (LONG positive, SHORT negative), so the cap
+            # is meaningful for SHORT-heavy books.
             exposure_pct=(
                 round(total_exposure / total_equity, 4)
                 if total_equity > 0
                 else 0.0
             ),
             positions=list(self._positions.values()),
+            # v0.2.9: per-side breakdown + true free cash.
+            exposure_long_usd=round(exposure_long, 2),
+            exposure_short_usd=round(exposure_short, 2),
+            position_count_long=position_count_long,
+            position_count_short=position_count_short,
+            available_cash_usd=round(available_cash, 2),
         )
 
     def get_order(self, order_id: str) -> SimulatedOrder | None:
