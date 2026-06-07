@@ -212,7 +212,7 @@ class Position(BaseModel):
     entry_price: float
     current_price: float
     unrealized_pnl: float
-    unrealized_pnl_pct: float
+    unrealized_pnl_percent: float
     exposure: float
     created_at: datetime = Field(default_factory=datetime.utcnow)
     # 2026-06-06 (v0.2.3): free-form metadata slot for position-scoped

@@ -929,7 +929,7 @@ class PaperExecutor:
                 entry_price=fill_price,
                 current_price=fill_price,
                 unrealized_pnl=0.0,
-                unrealized_pnl_pct=0.0,
+                unrealized_pnl_percent=0.0,
                 exposure=size * fill_price,
                 created_at=datetime.now(timezone.utc),
                 metadata=dict(new_meta),
@@ -949,7 +949,7 @@ class PaperExecutor:
                 entry_price=new_entry,
                 current_price=fill_price,
                 unrealized_pnl=0.0,
-                unrealized_pnl_pct=0.0,
+                unrealized_pnl_percent=0.0,
                 exposure=exposure,
                 created_at=existing.created_at,
                 # Same-direction average-in: preserve original entry
@@ -995,7 +995,7 @@ class PaperExecutor:
                         entry_price=fill_price,
                         current_price=fill_price,
                         unrealized_pnl=0.0,
-                        unrealized_pnl_pct=0.0,
+                        unrealized_pnl_percent=0.0,
                         exposure=residual * fill_price,
                         created_at=datetime.now(timezone.utc),
                         # Flipped into new direction — entry signal is the
@@ -1025,7 +1025,7 @@ class PaperExecutor:
                     entry_price=existing.entry_price,
                     current_price=fill_price,
                     unrealized_pnl=0.0,
-                    unrealized_pnl_pct=0.0,
+                    unrealized_pnl_percent=0.0,
                     exposure=remaining_size * fill_price,
                     created_at=existing.created_at,
                     # Partial close of same-direction: entry signal is
@@ -1060,7 +1060,7 @@ class PaperExecutor:
                 entry_price=pos.entry_price,
                 current_price=price,
                 unrealized_pnl=unrealized,
-                unrealized_pnl_pct=unrealized_pct,
+                unrealized_pnl_percent=unrealized_pct,
                 exposure=pos.size * price,
                 created_at=pos.created_at,
                 # Preserve metadata across price-tick reconstructions.
@@ -1267,7 +1267,7 @@ class PaperExecutor:
                     "entry_price": p.entry_price,
                     "current_price": p.current_price,
                     "unrealized_pnl": p.unrealized_pnl,
-                    "unrealized_pnl_pct": p.unrealized_pnl_pct,
+                    "unrealized_pnl_percent": p.unrealized_pnl_percent,
                     "exposure": p.exposure,
                     "created_at": p.created_at.isoformat() if hasattr(p.created_at, "isoformat") else str(p.created_at),
                     "metadata": dict(p.metadata),
@@ -1309,7 +1309,7 @@ class PaperExecutor:
                     entry_price=float(pd["entry_price"]),
                     current_price=float(pd["current_price"]),
                     unrealized_pnl=float(pd.get("unrealized_pnl", 0.0)),
-                    unrealized_pnl_pct=float(pd.get("unrealized_pnl_pct", 0.0)),
+                    unrealized_pnl_percent=float(pd.get("unrealized_pnl_percent", 0.0)),
                     exposure=float(pd.get("exposure", 0.0)),
                     created_at=__import__("datetime").datetime.fromisoformat(pd["created_at"])
                         if isinstance(pd.get("created_at"), str) else pd.get("created_at",

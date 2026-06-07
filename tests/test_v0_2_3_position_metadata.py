@@ -50,7 +50,7 @@ def _make_position(**overrides: Any) -> Position:
         "entry_price": 100.0,
         "current_price": 100.0,
         "unrealized_pnl": 0.0,
-        "unrealized_pnl_pct": 0.0,
+        "unrealized_pnl_percent": 0.0,
         "exposure": 50.0,
         "created_at": datetime(2026, 6, 6, tzinfo=timezone.utc),
     }

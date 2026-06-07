@@ -348,7 +348,7 @@ def main() -> int:
                 {
                     "symbol": p["symbol"], "side": p["side"], "size": p["size"],
                     "entry": p["entry_price"], "current": p["current_price"],
-                    "uPnL": p["unrealized_pnl"], "uPnL_pct": p["unrealized_pnl_pct"],
+                    "uPnL": p["unrealized_pnl"], "uPnL_pct": p["unrealized_pnl_percent"],
                     "exposure": p["exposure"], "opened_at": p["created_at"],
                 }
                 for p in positions
@@ -419,7 +419,7 @@ def main() -> int:
     for p in positions:
         sign = "+" if p["unrealized_pnl"] >= 0 else ""
         print(f"  {p['symbol']:5} {p['side']:<5} uPnL={sign}${p['unrealized_pnl']:.4f} "
-              f"({p['unrealized_pnl_pct']:+.2f}%)")
+              f"({p['unrealized_pnl_percent']:+.2f}%)")
     print()
     print(f"Signals: {signals.get('total_signals', 0):,} total", end="")
     if deltas:

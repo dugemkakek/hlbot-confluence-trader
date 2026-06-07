@@ -11,6 +11,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.8] — 2026-06-07 (unrealized_pnl_pct → unrealized_pnl_percent rename)
+
+Build bumped to **0.2.8** (`pyproject.toml`, `src/__init__.py`).
+
+One-line rename, but the root cause was a real UX bug. The
+`Position.unrealized_pnl_pct` field name suggested a fraction
+(0-1), but the producer (`_refresh_unrealized_pnl`) wrote it as
+a percent (0-100). Consumers that assumed fraction would
+100x the display. A live display yesterday showed "uPnL%=-15.49%"
+when the actual value was -0.155% — my PowerShell formatter
+`pct * 100` to convert to display format, but the field was
+already in percent, so the result was 100x off.
+
+### Change
+
+- `Position.unrealized_pnl_pct: float` → `Position.unrealized_pnl_percent: float`
+  in `src/data/models.py`. Same value (0-100 scale), explicit
+  unit at the call site.
+- All producers, consumers, state-file schema, hourly report,
+  and tests updated via `sed s/unrealized_pnl_pct/unrealized_pnl_percent/g`.
+
+### Files
+
+- `src/data/models.py` — field rename
+- `src/executor/paper_executor.py` — 7 occurrences
+- `src/orchestrator/trading_loop.py` — 1 occurrence
+- `scripts/hourly_report.py` — 2 occurrences
+- `tests/test_risk_and_execution.py` — 7 occurrences
+- `tests/test_v0_2_3_position_metadata.py` — 1 occurrence
+- `tests/test_v0_2_6_equity_carryover.py` — 1 occurrence
+- `tests/test_v0_2_7_full_state_carryover.py` — 1 occurrence
+- `tests/test_v0_2_8_unrealized_pnl_percent_rename.py` (new, 5 tests):
+  - `TestFieldRename` (2): field exists, old name doesn't
+  - `TestValueSemanticsUnchanged` (2): LONG+10% price = +10% uPnL%, SHORT+5% price = -5% uPnL%
+  - `TestStateFileRoundTrip` (2): export_state uses new name, restore_state reads new name
+
+### Total
+
+**288/289 passing** (282 → 288, +5 v0.2.8 tests; 1 pre-existing skip).
+
+### Live verified
+
+After restart on v0.2.8, XMR SHORT uPnL% correctly shows -0.404%
+(matches the manual `unrealized_pnl / notional * 100` calc).
+Previously this same position would have shown -40.4% with the
+old ambiguous name + PowerShell `* 100` formatter bug.
+
+---
+
 ## [0.2.7] — 2026-06-07 (full state persistence + live exchange read + $10 paper)
 
 Build bumped to **0.2.7** (`pyproject.toml`, `src/__init__.py`).

@@ -70,7 +70,7 @@ class TestPersistEquityStateShape:
                 Position(
                     symbol="BTC", side=OrderSide.LONG, size=0.001,
                     entry_price=100.0, current_price=99.5,
-                    unrealized_pnl=-0.05, unrealized_pnl_pct=-0.05,
+                    unrealized_pnl=-0.05, unrealized_pnl_percent=-0.05,
                     exposure=0.0995, metadata={},
                 )
             ],

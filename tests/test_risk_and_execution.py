@@ -564,7 +564,7 @@ class TestPositionPriceRefresh:
             ex._positions["BTC"] = Position(
                 symbol="BTC", side=OrderSide.LONG, size=0.5,
                 entry_price=100.0, current_price=100.0,
-                unrealized_pnl=0.0, unrealized_pnl_pct=0.0,
+                unrealized_pnl=0.0, unrealized_pnl_percent=0.0,
                 exposure=50.0,
                 created_at=datetime.now(timezone.utc),
             )
@@ -576,7 +576,7 @@ class TestPositionPriceRefresh:
             # 0.5 size * (110 - 100) = $5.00 unrealized
             assert p.positions[0].unrealized_pnl == pytest.approx(5.0, abs=0.01)
             # PnL pct = 5 / (0.5 * 100) = 10%
-            assert p.positions[0].unrealized_pnl_pct == pytest.approx(10.0, abs=0.1)
+            assert p.positions[0].unrealized_pnl_percent == pytest.approx(10.0, abs=0.1)
             await ex.disconnect()
         asyncio.run(run())
 
@@ -593,7 +593,7 @@ class TestPositionPriceRefresh:
             ex._positions["BTC"] = Position(
                 symbol="BTC", side=OrderSide.LONG, size=0.5,
                 entry_price=100.0, current_price=100.0,
-                unrealized_pnl=0.0, unrealized_pnl_pct=0.0,
+                unrealized_pnl=0.0, unrealized_pnl_percent=0.0,
                 exposure=50.0,
                 created_at=datetime.now(timezone.utc),
             )
@@ -647,7 +647,7 @@ class TestExposurePctDenominator:
             ex._positions["BTC"] = Position(
                 symbol="BTC", side=OrderSide.LONG, size=0.4,
                 entry_price=100.0, current_price=100.0,
-                unrealized_pnl=0.0, unrealized_pnl_pct=0.0,
+                unrealized_pnl=0.0, unrealized_pnl_percent=0.0,
                 exposure=40.0,
                 created_at=datetime.now(timezone.utc),
             )
@@ -672,7 +672,7 @@ class TestExposurePctDenominator:
             ex._positions["BTC"] = Position(
                 symbol="BTC", side=OrderSide.LONG, size=0.4,
                 entry_price=100.0, current_price=50.0,  # halved
-                unrealized_pnl=-20.0, unrealized_pnl_pct=-50.0,
+                unrealized_pnl=-20.0, unrealized_pnl_percent=-50.0,
                 exposure=20.0,  # 0.4 * 50
                 created_at=datetime.now(timezone.utc),
             )
@@ -721,7 +721,7 @@ class TestMaxPositionsCap:
             executor._positions[sym] = Position(
                 symbol=sym, side=OrderSide.SHORT, size=0.1,
                 entry_price=100.0, current_price=100.0,
-                unrealized_pnl=0.0, unrealized_pnl_pct=0.0,
+                unrealized_pnl=0.0, unrealized_pnl_percent=0.0,
                 exposure=10.0,
                 created_at=datetime.now(timezone.utc),
             )
@@ -746,7 +746,7 @@ class TestMaxPositionsCap:
             executor._positions[sym] = Position(
                 symbol=sym, side=OrderSide.SHORT, size=0.1,
                 entry_price=100.0, current_price=100.0,
-                unrealized_pnl=0.0, unrealized_pnl_pct=0.0,
+                unrealized_pnl=0.0, unrealized_pnl_percent=0.0,
                 exposure=10.0,
                 created_at=datetime.now(timezone.utc),
             )

@@ -979,7 +979,7 @@ class TradingOrchestrator:
                 entry=existing.entry_price,
                 exit_=close_result.fill_price or 0.0,
                 pnl=existing.unrealized_pnl,
-                pnl_pct=existing.unrealized_pnl_pct,
+                pnl_pct=existing.unrealized_pnl_percent,
                 reason="opposite-direction flip",
             )
             self.narrative.position_flipped(
