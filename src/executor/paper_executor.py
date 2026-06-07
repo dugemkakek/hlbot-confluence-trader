@@ -157,6 +157,12 @@ class PaperExecutor:
         self._orders: dict[str, SimulatedOrder] = {}  # key = order_id
         self._pending_limit_orders: dict[str, asyncio.Task] = {}
 
+        # 2026-06-07 (v0.2.7): equity curve for Sharpe/MDD continuity.
+        # Capped at 10,000 points (~3.5 days at 30s cycles). On overflow,
+        # drop the oldest 10% in one batch to amortize the resize cost.
+        self._equity_curve: list[dict[str, Any]] = []
+        self._equity_curve_max: int = 10_000
+
         # Lock to prevent concurrent order modifications
         self._lock = asyncio.Lock()
 
@@ -1236,6 +1242,116 @@ class PaperExecutor:
 
         logger.info("Position closed", symbol=symbol, fill_price=fill_price, pnl=pnl)
         return OrderResult(success=True, order=order, fill_price=fill_price)
+
+    # ------------------------------------------------------------------
+    # State persistence (v0.2.7)
+    # ------------------------------------------------------------------
+
+    def export_state(self) -> dict[str, Any]:
+        """Snapshot the executor's in-memory state for persistence.
+
+        Used by the orchestrator to write data/bot_equity.json so
+        paper-mode restarts can restore the full state (cash,
+        positions, realized PnL, equity curve). Live mode does not
+        use this — it queries the exchange on every start instead.
+        """
+        return {
+            "cash_balance": round(self._cash, 8),
+            "initial_balance": round(self._initial_balance, 8),
+            "realized_pnl": round(self._realized_pnl, 8),
+            "positions": [
+                {
+                    "symbol": p.symbol,
+                    "side": p.side.value if hasattr(p.side, "value") else p.side,
+                    "size": p.size,
+                    "entry_price": p.entry_price,
+                    "current_price": p.current_price,
+                    "unrealized_pnl": p.unrealized_pnl,
+                    "unrealized_pnl_pct": p.unrealized_pnl_pct,
+                    "exposure": p.exposure,
+                    "created_at": p.created_at.isoformat() if hasattr(p.created_at, "isoformat") else str(p.created_at),
+                    "metadata": dict(p.metadata),
+                }
+                for p in self._positions.values()
+            ],
+            "equity_curve": list(self._equity_curve),
+        }
+
+    def restore_state(self, state: dict[str, Any]) -> None:
+        """Restore the executor's in-memory state from a saved snapshot.
+
+        Used on paper-mode startup when data/bot_equity.json exists.
+        Validates the schema, then overwrites _cash, _realized_pnl,
+        _positions, _equity_curve. Does NOT change _initial_balance
+        (that's the YAML/env value — what you started with, not what
+        you have now).
+
+        Failures (bad schema, missing keys) are non-fatal: the
+        helper logs and leaves the executor in its current state.
+        """
+        try:
+            cash = float(state.get("cash_balance", self._initial_balance))
+            realized = float(state.get("realized_pnl", 0.0))
+            positions_data = state.get("positions", [])
+            equity_curve_data = state.get("equity_curve", [])
+
+            if cash < 0:
+                raise ValueError(f"cash_balance must be >= 0, got {cash}")
+
+            self._cash = cash
+            self._realized_pnl = realized
+            self._positions = {}
+            for pd in positions_data:
+                p = Position(
+                    symbol=pd["symbol"],
+                    side=OrderSide(pd["side"]) if isinstance(pd["side"], str) else pd["side"],
+                    size=float(pd["size"]),
+                    entry_price=float(pd["entry_price"]),
+                    current_price=float(pd["current_price"]),
+                    unrealized_pnl=float(pd.get("unrealized_pnl", 0.0)),
+                    unrealized_pnl_pct=float(pd.get("unrealized_pnl_pct", 0.0)),
+                    exposure=float(pd.get("exposure", 0.0)),
+                    created_at=__import__("datetime").datetime.fromisoformat(pd["created_at"])
+                        if isinstance(pd.get("created_at"), str) else pd.get("created_at",
+                            __import__("datetime").datetime.now(__import__("datetime").timezone.utc)),
+                    metadata=dict(pd.get("metadata", {})),
+                )
+                self._positions[p.symbol] = p
+            self._equity_curve = list(equity_curve_data)
+
+            logger.info(
+                "Executor state restored from disk",
+                cash=round(self._cash, 2),
+                realized_pnl=round(self._realized_pnl, 2),
+                positions=len(self._positions),
+                equity_curve_points=len(self._equity_curve),
+            )
+        except Exception as exc:
+            logger.warning(
+                "Failed to restore executor state — using defaults",
+                error=str(exc),
+            )
+
+    def record_equity_point(self, equity: float, ts: datetime | None = None) -> None:
+        """Append a (timestamp, equity) point to the equity curve.
+
+        Capped at 10,000 points (~3.5 days at 30s cycles). On overflow,
+        drops the oldest 10% in one batch to amortize the resize. Used
+        by Sharpe/MDD calculations so the metrics survive restarts.
+        """
+        if ts is None:
+            ts = datetime.now(timezone.utc)
+        self._equity_curve.append({
+            "ts": ts.isoformat() if hasattr(ts, "isoformat") else str(ts),
+            "equity": round(equity, 8),
+        })
+        if len(self._equity_curve) > self._equity_curve_max:
+            drop = max(1, self._equity_curve_max // 10)
+            self._equity_curve = self._equity_curve[drop:]
+
+    def get_equity_curve(self) -> list[dict[str, Any]]:
+        """Return a copy of the equity curve for Sharpe/MDD calc."""
+        return list(self._equity_curve)
 
     # ------------------------------------------------------------------
     # Getters

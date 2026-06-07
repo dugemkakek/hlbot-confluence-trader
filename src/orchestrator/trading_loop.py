@@ -274,6 +274,14 @@ class TradingOrchestrator:
 
         self._running = True
 
+        # 2026-06-07 (v0.2.7): paper mode restores the persisted
+        # state (cash, positions, equity curve); live mode queries
+        # the exchange. This is what makes data collection
+        # continuous across restarts in paper mode, and what keeps
+        # live mode safe (never trust a stale local file when real
+        # money is at stake).
+        await self._restore_or_query_state_on_start()
+
         # Start the main loop
         self._loop_task = asyncio.create_task(self._run_loop())
 
@@ -1116,13 +1124,14 @@ class TradingOrchestrator:
         return meta
 
     def _persist_equity_state(self) -> None:
-        """Write current equity snapshot to data/bot_equity.json.
+        """Write current full state to data/bot_equity.json (v2 schema).
 
-        2026-06-07 (v0.2.6): the launcher reads this file on restart
-        to set HL_EXECUTOR__INITIAL_BALANCE, so the bot's cash
-        account carries over across restarts. In-memory positions
-        and PnL are still lost on restart — this preserves cash
-        only.
+        2026-06-07 (v0.2.7): schema v2 carries cash, positions, realized
+        PnL, AND the equity curve. Paper mode restores the entire
+        snapshot on the next start (so the bot picks up where it left
+        off — same positions, same cash, same Sharpe/MDD continuity).
+        Live mode ignores the file and queries the exchange on every
+        start instead (see `_restore_or_query_state_on_start`).
 
         Failures are non-fatal: a corrupt or unwritable state file
         means the launcher falls back to config/dev.yaml on next
@@ -1131,15 +1140,29 @@ class TradingOrchestrator:
         if self.executor is None:
             return
         try:
+            # v0.2.7: also append to the equity curve (drives
+            # Sharpe/MDD continuity across restarts).
             portfolio = self.executor.get_portfolio()
+            self.executor.record_equity_point(portfolio.total_equity)
+
+            exec_state = self.executor.export_state()
             state = {
-                "version": 1,
+                "version": 2,
+                "mode": "paper" if self.dry_run else "live",
+                # v0.2.6 fields (kept for backward compat with the
+                # launcher + older v0.2.6 read paths).
                 "last_equity": round(portfolio.total_equity, 8),
                 "last_cash": round(portfolio.cash_balance, 8),
                 "last_unrealized_pnl": round(portfolio.unrealized_pnl, 8),
                 "last_realized_pnl": round(portfolio.realized_pnl, 8),
                 "last_positions_count": len(portfolio.positions),
                 "last_update_utc": datetime.now(timezone.utc).isoformat(),
+                # v0.2.7 fields — full state for restore.
+                "initial_balance": exec_state["initial_balance"],
+                "cash_balance": exec_state["cash_balance"],
+                "realized_pnl": exec_state["realized_pnl"],
+                "positions": exec_state["positions"],
+                "equity_curve": exec_state["equity_curve"],
                 "bot_version": __version__,
             }
             # Path: <project_root>/data/bot_equity.json
@@ -1158,6 +1181,111 @@ class TradingOrchestrator:
             # Non-fatal — log and continue. The bot keeps running
             # even if the state file can't be written.
             logger.warning("Failed to persist equity state", error=str(exc))
+
+    async def _restore_or_query_state_on_start(self) -> None:
+        """On startup, decide between paper-restore and live-query.
+
+        2026-06-07 (v0.2.7): the orchestrator now distinguishes
+        paper and live mode at startup.
+
+        - **Paper mode** (dry_run=true): read
+          data/bot_equity.json. If a v2 schema with `positions` and
+          `equity_curve` is present, call
+          `executor.restore_state(...)` to overwrite the executor's
+          in-memory state with the persisted snapshot. This is
+          what makes the data-collection continuous across
+          restarts.
+
+        - **Live mode** (dry_run=false): NEVER use the local
+          state file. The exchange is the source of truth for
+          cash and positions. Call `adapter.get_balances()` for
+          cash and (when the adapter supports it) fetch open
+          positions. Local realized PnL is journaled in
+          trades.db and is the same in both modes.
+
+        Falls back to the default state (config initial_balance,
+        no positions) on any error — the bot always starts
+        cleanly even if persistence or the exchange is
+        unavailable.
+        """
+        if self.executor is None:
+            return
+
+        # Compute the state file path.
+        project_root = Path(__file__).parent.parent.parent
+        state_path = project_root / "data" / "bot_equity.json"
+
+        if self.dry_run:
+            # PAPER mode: restore from disk.
+            if not state_path.exists():
+                logger.info("Paper mode: no prior state file, starting fresh")
+                return
+            try:
+                state = json.loads(state_path.read_text(encoding="utf-8"))
+                version = state.get("version", 0)
+                if version < 2:
+                    logger.info(
+                        "Paper mode: state file is v1 (cash only), "
+                        "starting fresh; next cycle will write v2",
+                        state_version=version,
+                    )
+                    return
+                self.executor.restore_state(state)
+            except Exception as exc:
+                logger.warning(
+                    "Paper mode: failed to read state file, starting fresh",
+                    error=str(exc),
+                )
+        else:
+            # LIVE mode: query the exchange, ignore local state file.
+            # The exchange is the source of truth for cash and
+            # positions. Local PnL comes from trades.db (handled
+            # separately by the trade journal).
+            if self.adapter is None:
+                logger.warning(
+                    "Live mode: no exchange adapter, cannot query "
+                    "balances/positions. Starting with default state."
+                )
+                return
+            try:
+                # Cash: sum USDT-equivalent balances.
+                balances = await self.adapter.get_balances()
+                usdt_free = 0.0
+                for b in balances:
+                    # Be permissive about the asset field name across
+                    # exchange adapters (asset/coin/currency).
+                    asset = getattr(b, "asset", None) or getattr(b, "coin", None) or getattr(b, "currency", None)
+                    if asset == "USDT":
+                        usdt_free = float(getattr(b, "free", 0) or 0)
+                        break
+                self.executor._cash = usdt_free
+                logger.info(
+                    "Live mode: cash balance queried from exchange",
+                    usdt_free=round(usdt_free, 4),
+                )
+                # Positions: depends on the adapter. The gate
+                # adapter may have a `get_positions` or we fall
+                # back to leaving positions empty (the next
+                # cycle's discovery will surface them via
+                # market data). We don't try to reconstruct the
+                # executor's in-memory Position objects from
+                # the exchange here because the bot's
+                # get_positions() / close_position() paths
+                # need the full Position model, not raw
+                # exchange data. That reconstruction is a
+                # follow-up. For now, live mode starts with
+                # the exchange's USDT balance and discovers
+                # positions via the normal cycle path.
+                #
+                # TODO v0.2.8: implement exchange.position_to_position()
+                # for the gate adapter so live restarts pick up
+                # existing positions instead of re-discovering.
+            except Exception as exc:
+                logger.warning(
+                    "Live mode: failed to query exchange, starting "
+                    "with default state",
+                    error=str(exc),
+                )
 
     async def _rescore_open_positions(
         self,

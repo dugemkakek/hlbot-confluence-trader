@@ -31,14 +31,12 @@ risk:
   max_position_pct_per_cycle: 0.20
 
 executor:
-  # 2026-06-07 (v0.2.6): initial_balance is now driven by
-  # data/bot_equity.json via the launch_bot.ps1 wrapper, which sets
-  # HL_EXECUTOR__INITIAL_BALANCE in the spawned process env. The
-  # value below is the FALLBACK for first-ever starts when no state
-  # file exists yet. After the first cycle, the bot overwrites this
-  # with the actual realized equity, and subsequent restarts pick up
-  # from there automatically.
-  initial_balance: 50.0
+  # 2026-06-07 (v0.2.7): dropped to 10.0 for a fresh data-collection
+  # baseline. Paper mode will accumulate from here, and the launcher
+  # sets HL_EXECUTOR_INITIAL_BALANCE on every start from
+  # data/bot_equity.json (v0.2.6+). The value below is the FALLBACK
+  # for first-ever starts when no state file exists yet.
+  initial_balance: 10.0
   dry_run: true
   max_trades_per_hour: 10
   max_position_pct: 0.20

@@ -187,7 +187,12 @@ class TestLauncherEnvVarContract:
 
     def test_config_loader_falls_back_to_yaml_without_env(self, monkeypatch):
         from src.utils.config import load_config
-        monkeypatch.delenv("HL_EXECUTOR__INITIAL_BALANCE", raising=False)
+        # v0.2.6 had a typo here (double underscore) that made this
+        # test order-dependent: a previous test that set
+        # HL_EXECUTOR_INITIAL_BALANCE (single underscore, correct)
+        # would leak into this one. Fix: del the correct name.
+        monkeypatch.delenv("HL_EXECUTOR_INITIAL_BALANCE", raising=False)
         cfg = load_config(env="dev")
-        # dev.yaml sets 50.0 (the v0.2.6 fallback)
-        assert cfg.executor.initial_balance == 50.0
+        # v0.2.7: dev.yaml sets 10.0 (was 50.0 in v0.2.6). The
+        # fallback is whatever dev.yaml says at test time.
+        assert cfg.executor.initial_balance == 10.0

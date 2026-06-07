@@ -199,8 +199,10 @@ class TestPreTradeCheck:
     def test_full_pipeline_passes(self, risk_manager):
         """All gates green → trade allowed."""
         rm, _ = risk_manager
-        # Set peak equal to current so drawdown is 0 (no breaker)
-        rm._peak_equity = 50.0
+        # Set peak equal to current so drawdown is 0 (no breaker).
+        # v0.2.7: initial_balance is now 10.0 (was 50.0); use the
+        # executor's current cash so the test is config-independent.
+        rm._peak_equity = rm._portfolio._cash
         rm._daily = DailyStats(trades=2)
         async def run():
             ok, reason = await rm.pre_trade_check(
@@ -706,7 +708,13 @@ class TestMaxPositionsCap:
         """4 SHORTs already open → 5th SHORT must be blocked."""
         rm, executor = risk_manager
         rm._max_positions = 4  # matches dev.yaml
-        rm._peak_equity = 100.0
+        # Override cash + peak so neither the drawdown check nor the
+        # portfolio-exposure check fires before max_positions. With
+        # initial_balance=10 (v0.2.7), the default cash of 10 plus
+        # 4*10 exposure = 80% > 50% cap would trip exposure first.
+        # Set cash to 50 so total_equity=90 → exposure=40 → 44% < 50%.
+        executor._cash = 50.0
+        rm._peak_equity = executor._cash
 
         from src.data.models import Position, OrderSide
         for sym in ["BTC", "ETH", "SOL", "AVAX"]:
